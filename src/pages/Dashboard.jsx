@@ -2,9 +2,9 @@ import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import {
   getPoolBalance, getTotalDeposited, getTotalLoaned, getTotalRepaid,
-  getActiveLoanCount, getRecentActivity, getOutstandingLoans,
+  getActiveLoanCount, getRecentActivity, getOutstandingLoans, getDailyStats,
 } from '../utils/calculations';
-import { formatCurrency, formatDate } from '../utils/formatters';
+import { formatCurrency, formatDate, todayISO } from '../utils/formatters';
 import StatCard from '../components/ui/StatCard';
 import Badge from '../components/ui/Badge';
 
@@ -84,6 +84,7 @@ export default function Dashboard() {
   const { state } = useStore();
   const navigate = useNavigate();
 
+  const today          = todayISO();
   const poolBalance    = getPoolBalance(state);
   const totalDeposited = getTotalDeposited(state.deposits);
   const totalLoaned    = getTotalLoaned(state.loans);
@@ -91,17 +92,61 @@ export default function Dashboard() {
   const activeLoans    = getActiveLoanCount(state.loans, state.repayments);
   const activity       = getRecentActivity(state, 10);
   const outstanding    = getOutstandingLoans(state);
+  const daily          = getDailyStats(state, today);
 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-        <p className="text-sm text-slate-500 mt-0.5">BHSA Finance System — Admin Overview</p>
+      <div className="flex items-start justify-between flex-wrap gap-2">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
+          <p className="text-sm text-slate-500 mt-0.5">BHSA Finance System — Admin Overview</p>
+        </div>
+        <p className="text-xs text-slate-400 font-medium mt-1">{new Date().toLocaleDateString('en-IN', { weekday:'long', day:'2-digit', month:'long', year:'numeric' })}</p>
       </div>
 
       {/* Pool balance hero */}
       <PoolBalanceHero balance={poolBalance} totalDeposited={totalDeposited} />
+
+      {/* Today's Summary */}
+      <div className="card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-slate-800 flex items-center justify-center">
+              <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h2 className="text-sm font-semibold text-slate-900">Today's Summary</h2>
+          </div>
+          {daily.txnCount === 0 ? (
+            <span className="text-xs text-slate-400">No transactions today</span>
+          ) : (
+            <span className="text-xs text-slate-400">{daily.txnCount} transaction{daily.txnCount !== 1 ? 's' : ''} today</span>
+          )}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-credit-50 rounded-xl p-3">
+            <p className="text-xs font-semibold text-credit-600 uppercase tracking-wide mb-1">Deposited</p>
+            <p className="text-lg font-bold text-credit-700">{formatCurrency(daily.deposited)}</p>
+          </div>
+          <div className="bg-loan-50 rounded-xl p-3">
+            <p className="text-xs font-semibold text-loan-600 uppercase tracking-wide mb-1">Lent Out</p>
+            <p className="text-lg font-bold text-loan-700">{formatCurrency(daily.loaned)}</p>
+          </div>
+          <div className="bg-repay-50 rounded-xl p-3">
+            <p className="text-xs font-semibold text-repay-600 uppercase tracking-wide mb-1">Repaid</p>
+            <p className="text-lg font-bold text-repay-700">{formatCurrency(daily.repaid)}</p>
+          </div>
+          <div className={`rounded-xl p-3 ${daily.net >= 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
+            <p className={`text-xs font-semibold uppercase tracking-wide mb-1 ${daily.net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>Net Movement</p>
+            <p className={`text-lg font-bold ${daily.net >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+              {daily.net >= 0 ? '+' : ''}{formatCurrency(daily.net)}
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

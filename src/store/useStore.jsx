@@ -25,9 +25,9 @@ export function StoreProvider({ children }) {
     try {
       const [m, d, l, r] = await Promise.all([
         supabase.from('members').select('*').order('name', { ascending: true }),
-        supabase.from('deposits').select('*').order('date', { ascending: false }),
-        supabase.from('loans').select('*').order('date', { ascending: false }),
-        supabase.from('repayments').select('*').order('date', { ascending: false }),
+        supabase.from('deposits').select('*').neq('deleted', true).order('date', { ascending: false }),
+        supabase.from('loans').select('*').neq('deleted', true).order('date', { ascending: false }),
+        supabase.from('repayments').select('*').neq('deleted', true).order('date', { ascending: false }),
       ]);
 
       if (m.error) throw new Error(`Members: ${m.error.message}`);
@@ -53,6 +53,7 @@ export function StoreProvider({ children }) {
   // ── Actions ─────────────────────────────────────────────────────────────
   const actions = {
 
+    // ── Members ──────────────────────────────────────────────────────────
     addMember: async ({ name, phone, joined_date }) => {
       const { error } = await supabase.from('members').insert([{
         id: generateId('M'),
@@ -68,6 +69,7 @@ export function StoreProvider({ children }) {
       await loadAll();
     },
 
+    // ── Deposits ─────────────────────────────────────────────────────────
     addDeposit: async ({ member_id, amount, date, note }) => {
       const { error } = await supabase.from('deposits').insert([{
         id: generateId('D'),
@@ -80,8 +82,42 @@ export function StoreProvider({ children }) {
       await loadAll();
     },
 
+    updateDeposit: async (id, data, reason) => {
+      const { error } = await supabase.from('deposits').update({
+        ...data,
+        edit_reason: reason,
+        edited_at:   new Date().toISOString(),
+      }).eq('id', id);
+      if (error) throw new Error(error.message);
+      await loadAll();
+    },
+
+    deleteDeposit: async (id, reason) => {
+      const { error } = await supabase.from('deposits').update({
+        deleted:     true,
+        edit_reason: reason,
+        edited_at:   new Date().toISOString(),
+      }).eq('id', id);
+      if (error) throw new Error(error.message);
+      await loadAll();
+    },
+
+    // ── Broadcast Deposit (FinWave) ───────────────────────────────────────
+    broadcastDeposit: async ({ member_ids, amount, date, note }) => {
+      const rows = member_ids.map(member_id => ({
+        id: generateId('D'),
+        member_id,
+        amount: Number(amount),
+        date,
+        note: note || null,
+      }));
+      const { error } = await supabase.from('deposits').insert(rows);
+      if (error) throw new Error(error.message);
+      await loadAll();
+    },
+
+    // ── Loans ─────────────────────────────────────────────────────────────
     addLoan: async ({ member_id, amount, date, reason }) => {
-      // Generate sequential loan ID from current count in DB
       const { count } = await supabase
         .from('loans')
         .select('*', { count: 'exact', head: true });
@@ -100,10 +136,30 @@ export function StoreProvider({ children }) {
       return loanId;
     },
 
+    updateLoan: async (id, data, reason) => {
+      const { error } = await supabase.from('loans').update({
+        ...data,
+        edit_reason: reason,
+        edited_at:   new Date().toISOString(),
+      }).eq('id', id);
+      if (error) throw new Error(error.message);
+      await loadAll();
+    },
+
+    deleteLoan: async (id, reason) => {
+      const { error } = await supabase.from('loans').update({
+        deleted:     true,
+        edit_reason: reason,
+        edited_at:   new Date().toISOString(),
+      }).eq('id', id);
+      if (error) throw new Error(error.message);
+      await loadAll();
+    },
+
+    // ── Repayments ────────────────────────────────────────────────────────
     addRepayment: async ({ loan_id, member_id, amount, date, note }) => {
       const numAmount = Number(amount);
 
-      // 1. Insert repayment
       const { error: rErr } = await supabase.from('repayments').insert([{
         id: generateId('R'),
         loan_id, member_id,
@@ -113,18 +169,17 @@ export function StoreProvider({ children }) {
       }]);
       if (rErr) throw new Error(rErr.message);
 
-      // 2. Re-fetch loan + all its repayments to compute new status
       const { data: loan, error: lErr } = await supabase
         .from('loans').select('amount').eq('id', loan_id).single();
       if (lErr) throw new Error(lErr.message);
 
       const { data: allRep, error: allErr } = await supabase
-        .from('repayments').select('amount').eq('loan_id', loan_id);
+        .from('repayments').select('amount').eq('loan_id', loan_id).neq('deleted', true);
       if (allErr) throw new Error(allErr.message);
 
       const totalRepaid = allRep.reduce((s, r) => s + Number(r.amount), 0);
-      const loanAmt = Number(loan.amount);
-      const newStatus = totalRepaid >= loanAmt
+      const loanAmt     = Number(loan.amount);
+      const newStatus   = totalRepaid >= loanAmt
         ? 'cleared'
         : totalRepaid > 0 ? 'partially_repaid' : 'active';
 
@@ -132,6 +187,26 @@ export function StoreProvider({ children }) {
         .from('loans').update({ status: newStatus }).eq('id', loan_id);
       if (uErr) throw new Error(uErr.message);
 
+      await loadAll();
+    },
+
+    updateRepayment: async (id, data, reason) => {
+      const { error } = await supabase.from('repayments').update({
+        ...data,
+        edit_reason: reason,
+        edited_at:   new Date().toISOString(),
+      }).eq('id', id);
+      if (error) throw new Error(error.message);
+      await loadAll();
+    },
+
+    deleteRepayment: async (id, reason) => {
+      const { error } = await supabase.from('repayments').update({
+        deleted:     true,
+        edit_reason: reason,
+        edited_at:   new Date().toISOString(),
+      }).eq('id', id);
+      if (error) throw new Error(error.message);
       await loadAll();
     },
   };

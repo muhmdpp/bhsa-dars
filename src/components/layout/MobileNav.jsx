@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom';
 
+// Mobile nav shows 5 key items (most used) — overflow via sidebar on desktop
 const mobileNavItems = [
   {
     path: '/',
@@ -31,22 +32,12 @@ const mobileNavItems = [
     ),
   },
   {
-    path: '/loan',
-    label: 'Loan',
+    path: '/transactions',
+    label: 'Txns',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-          d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-  },
-  {
-    path: '/repayment',
-    label: 'Repay',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-          d="M9 11l3-3m0 0l3 3m-3-3v8m0-13a9 9 0 110 18 9 9 0 010-18z" />
+          d="M4 6h16M4 10h16M4 14h16M4 18h16" />
       </svg>
     ),
   },

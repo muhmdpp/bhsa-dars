@@ -168,3 +168,19 @@ export function getOutstandingLoans({ loans, repayments, members }) {
 export function getActiveLoanCount(loans, repayments) {
   return loans.filter(l => computeLoanStatus(l, repayments) !== 'cleared').length;
 }
+
+// ── Daily stats (for dashboard today summary) ───────────────────────────────
+
+export function getDailyStats({ deposits, loans, repayments }, isoDate) {
+  const d = deposits.filter(x => x.date === isoDate);
+  const l = loans.filter(x => x.date === isoDate);
+  const r = repayments.filter(x => x.date === isoDate);
+
+  const deposited  = d.reduce((s, x) => s + x.amount, 0);
+  const loaned     = l.reduce((s, x) => s + x.amount, 0);
+  const repaid     = r.reduce((s, x) => s + x.amount, 0);
+  const net        = deposited - loaned + repaid;
+  const txnCount   = d.length + l.length + r.length;
+
+  return { deposited, loaned, repaid, net, txnCount };
+}
