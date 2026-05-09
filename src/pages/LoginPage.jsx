@@ -64,8 +64,9 @@ export default function LoginPage() {
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="admin@example.com"
-                  className="w-full pl-9 pr-4 py-3 bg-white/8 border border-white/15 rounded-xl text-white placeholder-slate-500 text-sm
+                  className="w-full pl-9 pr-4 py-3 bg-white/10 border border-white/15 rounded-xl text-white placeholder-slate-500 text-sm
                     focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-transparent transition-all"
+                  style={{ color: '#ffffff', caretColor: '#ffffff' }}
                 />
               </div>
             </div>
@@ -90,8 +91,9 @@ export default function LoginPage() {
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-9 pr-10 py-3 bg-white/8 border border-white/15 rounded-xl text-white placeholder-slate-500 text-sm
+                  className="w-full pl-9 pr-10 py-3 bg-white/10 border border-white/15 rounded-xl text-white placeholder-slate-500 text-sm
                     focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-transparent transition-all"
+                  style={{ color: '#ffffff', caretColor: '#ffffff' }}
                 />
                 <button
                   type="button"

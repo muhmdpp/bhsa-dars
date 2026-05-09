@@ -155,6 +155,14 @@ export default function Sidebar() {
           Lock Screen
         </button>
         <p className="text-xs text-slate-300 text-center">BHSA Finance System v1.1.0</p>
+        <a
+          href="https://www.watermelonbranding.in"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block text-center text-[10px] text-slate-400 hover:text-slate-600 transition-colors mt-1"
+        >
+          Developed by <span className="font-semibold text-slate-500">Watermelon</span> 
+        </a>
       </div>
     </aside>
   );
