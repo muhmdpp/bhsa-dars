@@ -192,10 +192,6 @@ export function StoreProvider({ children }) {
       }]);
       if (rErr) throw new Error(rErr.message);
 
-      const { data: loan, error: lErr } = await supabase
-        .from('loans').select('amount').eq('id', loan_id).single();
-      if (lErr) throw new Error(lErr.message);
-
       const { data: allRep, error: allErr } = await supabase
         .from('repayments').select('amount').eq('loan_id', loan_id).neq('deleted', true);
       if (allErr) throw new Error(allErr.message);
