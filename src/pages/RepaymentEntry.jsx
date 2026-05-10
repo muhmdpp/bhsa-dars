@@ -20,9 +20,14 @@ export default function RepaymentEntry() {
     sub: m.status === 'inactive' ? 'Inactive' : m.phone,
   }));
 
-  const activeLoans = memberId
+  const activeLoans  = memberId
     ? getMemberActiveLoans(memberId, state.loans, state.repayments)
     : [];
+
+  const allMemberLoans = memberId
+    ? state.loans.filter(l => l.member_id === memberId)
+    : [];
+  const allLoansCleared = allMemberLoans.length > 0 && activeLoans.length === 0;
 
   const selectedLoan = activeLoans.find(l => l.id === selectedLoanId);
   const amount = Number(form.amount) || 0;
@@ -132,7 +137,21 @@ export default function RepaymentEntry() {
               </h2>
 
               {activeLoans.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-4">No active loans for this member</p>
+                <div className="text-center py-6">
+                  {allLoansCleared ? (
+                    <>
+                      <div className="w-10 h-10 bg-credit-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                        <svg className="w-5 h-5 text-credit-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <p className="text-sm font-semibold text-credit-700">All loans are fully repaid</p>
+                      <p className="text-xs text-slate-400 mt-0.5">This member has no outstanding balance.</p>
+                    </>
+                  ) : (
+                    <p className="text-sm text-slate-400">No active loans for this member</p>
+                  )}
+                </div>
               ) : (
                 <div className="space-y-3">
                   {activeLoans.map(loan => {

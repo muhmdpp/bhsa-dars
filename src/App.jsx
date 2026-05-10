@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import Members from './pages/Members';
 import MemberLedger from './pages/MemberLedger';
 import DepositEntry from './pages/DepositEntry';
+import WithdrawalEntry from './pages/WithdrawalEntry';
 import LoanEntry from './pages/LoanEntry';
 import RepaymentEntry from './pages/RepaymentEntry';
 import Reports from './pages/Reports';
@@ -31,6 +32,7 @@ function AppInner() {
           <Route path="/members"             element={<Members />} />
           <Route path="/members/:id"         element={<MemberLedger />} />
           <Route path="/deposit"             element={<DepositEntry />} />
+          <Route path="/withdrawal"           element={<WithdrawalEntry />} />
           <Route path="/broadcast-deposit"   element={<BroadcastDeposit />} />
           <Route path="/loan"                element={<LoanEntry />} />
           <Route path="/repayment"           element={<RepaymentEntry />} />

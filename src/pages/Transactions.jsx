@@ -226,9 +226,10 @@ function TxnRow({ txn, type, memberMap, onEdit, onDelete }) {
 
 // ── Main Page ────────────────────────────────────────────────────────────────
 const TABS = [
-  { key: 'deposits',   label: 'Deposits',   color: 'text-credit-600' },
-  { key: 'loans',      label: 'Loans',      color: 'text-loan-600' },
-  { key: 'repayments', label: 'Repayments', color: 'text-repay-600' },
+  { key: 'deposits',    label: 'Deposits',    color: 'text-credit-600' },
+  { key: 'withdrawals', label: 'Withdrawals', color: 'text-amber-600' },
+  { key: 'loans',       label: 'Loans',       color: 'text-loan-600' },
+  { key: 'repayments',  label: 'Repayments',  color: 'text-repay-600' },
 ];
 
 export default function Transactions() {
@@ -261,16 +262,18 @@ export default function Transactions() {
 
   // Edit save handlers
   async function handleEditSave(id, updates, reason) {
-    if (activeTab === 'deposits')   await actions.updateDeposit(id, updates, reason);
-    if (activeTab === 'loans')      await actions.updateLoan(id, updates, reason);
-    if (activeTab === 'repayments') await actions.updateRepayment(id, updates, reason);
+    if (activeTab === 'deposits')    await actions.updateDeposit(id, updates, reason);
+    if (activeTab === 'withdrawals') await actions.updateWithdrawal(id, updates, reason);
+    if (activeTab === 'loans')       await actions.updateLoan(id, updates, reason);
+    if (activeTab === 'repayments')  await actions.updateRepayment(id, updates, reason);
   }
 
   // Delete handlers
   async function handleDeleteConfirm(id, reason) {
-    if (activeTab === 'deposits')   await actions.deleteDeposit(id, reason);
-    if (activeTab === 'loans')      await actions.deleteLoan(id, reason);
-    if (activeTab === 'repayments') await actions.deleteRepayment(id, reason);
+    if (activeTab === 'deposits')    await actions.deleteDeposit(id, reason);
+    if (activeTab === 'withdrawals') await actions.deleteWithdrawal(id, reason);
+    if (activeTab === 'loans')       await actions.deleteLoan(id, reason);
+    if (activeTab === 'repayments')  await actions.deleteRepayment(id, reason);
   }
 
   return (

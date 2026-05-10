@@ -1,18 +1,30 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
-import { getMemberSummary, getMemberLoansWithStatus, getLoanRepaidAmount } from '../utils/calculations';
+import { getMemberSummary, getMemberLoansWithStatus } from '../utils/calculations';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import Badge from '../components/ui/Badge';
 
 function TimelineEntry({ item }) {
-  const isDeposit   = item.type === 'deposit';
-  const isLoan      = item.type === 'loan';
-  const isRepayment = item.type === 'repayment';
+  const isDeposit    = item.type === 'deposit';
+  const isLoan       = item.type === 'loan';
+  const isRepayment  = item.type === 'repayment';
+  const isWithdrawal = item.type === 'withdrawal';
 
-  const dotColor = isDeposit ? 'bg-credit-500' : isLoan ? 'bg-loan-500' : 'bg-repay-500';
-  const amountColor = isDeposit ? 'text-credit-600' : isLoan ? 'text-loan-600' : 'text-repay-600';
-  const sign = isLoan ? '−' : '+';
-  const label = isDeposit ? 'Deposit' : isLoan ? `Loan — ${item.id}` : `Repayment → ${item.loan_id}`;
+  const dotColor    = isDeposit    ? 'bg-credit-500'
+                    : isLoan       ? 'bg-loan-500'
+                    : isWithdrawal ? 'bg-amber-500'
+                    : 'bg-repay-500';
+
+  const amountColor = isDeposit    ? 'text-credit-600'
+                    : isLoan       ? 'text-loan-600'
+                    : isWithdrawal ? 'text-amber-600'
+                    : 'text-repay-600';
+
+  const sign  = (isLoan || isWithdrawal) ? '−' : '+';
+  const label = isDeposit    ? 'Deposit'
+              : isLoan       ? `Loan — ${item.id}`
+              : isWithdrawal ? 'Withdrawal'
+              : `Repayment → ${item.loan_id}`;
 
   return (
     <div className="flex gap-4 group">
@@ -27,7 +39,7 @@ function TimelineEntry({ item }) {
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="text-sm font-medium text-slate-800">{label}</p>
-            {item.note && <p className="text-xs text-slate-400 mt-0.5 truncate">{item.note}</p>}
+            {item.note   && <p className="text-xs text-slate-400 mt-0.5 truncate">{item.note}</p>}
             {!item.note && item.reason && <p className="text-xs text-slate-400 mt-0.5 truncate">{item.reason}</p>}
           </div>
           <div className="text-right flex-shrink-0">
@@ -37,9 +49,9 @@ function TimelineEntry({ item }) {
             <p className="text-xs text-slate-400">{formatDate(item.date)}</p>
           </div>
         </div>
-        {/* Running balance */}
+        {/* Running deposit balance */}
         <p className="text-xs text-slate-500 mt-1">
-          Balance after: <span className="font-medium text-slate-700">{formatCurrency(item.runningBalance)}</span>
+          Deposit balance: <span className="font-medium text-slate-700">{formatCurrency(item.runningBalance)}</span>
         </p>
       </div>
     </div>
@@ -64,24 +76,26 @@ export default function MemberLedger() {
   const summary = getMemberSummary(id, state);
   const loans   = getMemberLoansWithStatus(id, state.loans, state.repayments);
 
-  // Build unified timeline with running balance
-  const memberDeposits   = state.deposits.filter(d => d.member_id === id);
-  const memberLoans      = state.loans.filter(l => l.member_id === id);
-  const memberRepayments = state.repayments.filter(r => r.member_id === id);
+  // Build unified timeline — deposits, withdrawals, loans, repayments
+  const memberDeposits    = state.deposits.filter(d => d.member_id === id);
+  const memberLoans       = state.loans.filter(l => l.member_id === id);
+  const memberRepayments  = state.repayments.filter(r => r.member_id === id);
+  const memberWithdrawals = (state.withdrawals || []).filter(w => w.member_id === id);
 
   const timeline = [
-    ...memberDeposits.map(d => ({ ...d, type: 'deposit' })),
-    ...memberLoans.map(l => ({ ...l, type: 'loan' })),
-    ...memberRepayments.map(r => ({ ...r, type: 'repayment' })),
-  ].sort((a, b) => new Date(a.date) - new Date(b.date));
+    ...memberDeposits.map(d    => ({ ...d, type: 'deposit' })),
+    ...memberLoans.map(l       => ({ ...l, type: 'loan' })),
+    ...memberRepayments.map(r  => ({ ...r, type: 'repayment' })),
+    ...memberWithdrawals.map(w => ({ ...w, type: 'withdrawal' })),
+  ].sort((a, b) => new Date(a.date) - new Date(b.date) || (a.type === 'deposit' ? -1 : 1));
 
-  // Compute running balance for member (deposits add, loans subtract, repayments add)
-  let runningBalance = 0;
+  // Running deposit balance: deposits add, withdrawals subtract
+  // (loans/repayments are tracked separately but shown in timeline)
+  let runningDepositBalance = 0;
   const timelineWithBalance = timeline.map(item => {
-    if (item.type === 'deposit') runningBalance += item.amount;
-    else if (item.type === 'loan') runningBalance -= item.amount;
-    else if (item.type === 'repayment') runningBalance += item.amount;
-    return { ...item, runningBalance };
+    if      (item.type === 'deposit')    runningDepositBalance += item.amount;
+    else if (item.type === 'withdrawal') runningDepositBalance -= item.amount;
+    return { ...item, runningBalance: runningDepositBalance };
   });
 
   return (
@@ -112,29 +126,41 @@ export default function MemberLedger() {
       </div>
 
       {/* Summary pills */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <div className="card p-4 bg-credit-50 border-credit-200">
           <p className="text-xs font-semibold text-credit-600 uppercase tracking-wide">Total Deposited</p>
           <p className="text-xl font-bold text-credit-700 mt-1">{formatCurrency(summary.totalDeposited)}</p>
+        </div>
+        <div className="card p-4 bg-amber-50 border-amber-200">
+          <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide">Total Withdrawn</p>
+          <p className="text-xl font-bold text-amber-700 mt-1">{formatCurrency(summary.totalWithdrawn)}</p>
+        </div>
+        <div className="card p-4 bg-emerald-50 border-emerald-200">
+          <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wide">Deposit Balance</p>
+          <p className="text-xl font-bold text-emerald-700 mt-1">{formatCurrency(summary.availableToWithdraw)}</p>
         </div>
         <div className="card p-4 bg-loan-50 border-loan-200">
           <p className="text-xs font-semibold text-loan-600 uppercase tracking-wide">Total Borrowed</p>
           <p className="text-xl font-bold text-loan-700 mt-1">{formatCurrency(summary.totalBorrowed)}</p>
         </div>
-        <div className="card p-4 bg-repay-50 border-repay-200">
-          <p className="text-xs font-semibold text-repay-600 uppercase tracking-wide">Total Repaid</p>
-          <p className="text-xl font-bold text-repay-700 mt-1">{formatCurrency(summary.totalRepaid)}</p>
-        </div>
-        <div className="card p-4 bg-amber-50 border-amber-200">
-          <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide">Outstanding</p>
-          <p className="text-xl font-bold text-amber-700 mt-1">{formatCurrency(summary.outstanding)}</p>
+        <div className="card p-4 bg-red-50 border-red-200">
+          <p className="text-xs font-semibold text-red-600 uppercase tracking-wide">Outstanding Loan</p>
+          <p className="text-xl font-bold text-red-700 mt-1">{formatCurrency(summary.outstanding)}</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Transaction timeline */}
         <div className="lg:col-span-3 card p-5">
-          <h2 className="section-title">Transaction Timeline</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="section-title mb-0">Transaction Timeline</h2>
+            <div className="flex items-center gap-3 text-[10px] font-semibold">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-credit-500 inline-block"/>Deposit</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block"/>Withdrawal</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-loan-500 inline-block"/>Loan</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-repay-500 inline-block"/>Repayment</span>
+            </div>
+          </div>
           {timelineWithBalance.length === 0 ? (
             <p className="text-sm text-slate-400 text-center py-8">No transactions yet</p>
           ) : (

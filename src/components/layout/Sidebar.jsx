@@ -32,6 +32,16 @@ const navItems = [
     ),
   },
   {
+    path: '/withdrawal',
+    label: 'Withdrawal',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+  },
+  {
     path: '/broadcast-deposit',
     label: 'FinWave Deposit',
     icon: (
@@ -161,7 +171,7 @@ export default function Sidebar() {
           rel="noopener noreferrer"
           className="block text-center text-[10px] text-slate-400 hover:text-slate-600 transition-colors mt-1"
         >
-          Developed by <span className="font-semibold text-slate-500">Watermelon</span> 
+          Developed by <span className="font-semibold text-slate-500">Watermelon</span>
         </a>
       </div>
     </aside>

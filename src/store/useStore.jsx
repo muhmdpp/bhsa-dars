@@ -11,37 +11,41 @@ const StoreContext = createContext(null);
 // ── Provider ─────────────────────────────────────────────────────────────────
 export function StoreProvider({ children }) {
   const [state, setState] = useState({
-    members:    [],
-    deposits:   [],
-    loans:      [],
-    repayments: [],
-    loading:    true,
-    error:      null,
+    members:     [],
+    deposits:    [],
+    loans:       [],
+    repayments:  [],
+    withdrawals: [],
+    loading:     true,
+    error:       null,
   });
 
   // ── Load all tables ─────────────────────────────────────────────────────
   const loadAll = useCallback(async () => {
     setState(s => ({ ...s, loading: true, error: null }));
     try {
-      const [m, d, l, r] = await Promise.all([
+      const [m, d, l, r, w] = await Promise.all([
         supabase.from('members').select('*').order('name', { ascending: true }),
         supabase.from('deposits').select('*').neq('deleted', true).order('date', { ascending: false }),
         supabase.from('loans').select('*').neq('deleted', true).order('date', { ascending: false }),
         supabase.from('repayments').select('*').neq('deleted', true).order('date', { ascending: false }),
+        supabase.from('withdrawals').select('*').neq('deleted', true).order('date', { ascending: false }),
       ]);
 
       if (m.error) throw new Error(`Members: ${m.error.message}`);
       if (d.error) throw new Error(`Deposits: ${d.error.message}`);
       if (l.error) throw new Error(`Loans: ${l.error.message}`);
       if (r.error) throw new Error(`Repayments: ${r.error.message}`);
+      if (w.error) throw new Error(`Withdrawals: ${w.error.message}`);
 
       setState({
-        members:    m.data.map(normalise),
-        deposits:   d.data.map(normalise),
-        loans:      l.data.map(normalise),
-        repayments: r.data.map(normalise),
-        loading:    false,
-        error:      null,
+        members:     m.data.map(normalise),
+        deposits:    d.data.map(normalise),
+        loans:       l.data.map(normalise),
+        repayments:  r.data.map(normalise),
+        withdrawals: w.data.map(normalise),
+        loading:     false,
+        error:       null,
       });
     } catch (err) {
       setState(s => ({ ...s, loading: false, error: err.message }));
@@ -160,6 +164,25 @@ export function StoreProvider({ children }) {
     addRepayment: async ({ loan_id, member_id, amount, date, note }) => {
       const numAmount = Number(amount);
 
+      // Fetch current loan + existing repayments to check remaining balance
+      const { data: loan, error: lFetchErr } = await supabase
+        .from('loans').select('amount').eq('id', loan_id).single();
+      if (lFetchErr) throw new Error(lFetchErr.message);
+
+      const { data: existingRep, error: rFetchErr } = await supabase
+        .from('repayments').select('amount').eq('loan_id', loan_id).neq('deleted', true);
+      if (rFetchErr) throw new Error(rFetchErr.message);
+
+      const alreadyRepaid = existingRep.reduce((s, r) => s + Number(r.amount), 0);
+      const remaining     = Number(loan.amount) - alreadyRepaid;
+
+      if (remaining <= 0) {
+        throw new Error('This loan is already fully repaid. No further payment is allowed.');
+      }
+      if (numAmount > remaining) {
+        throw new Error(`Amount exceeds remaining balance of ₹${remaining.toLocaleString('en-IN')}. Enter ₹${remaining.toLocaleString('en-IN')} or less.`);
+      }
+
       const { error: rErr } = await supabase.from('repayments').insert([{
         id: generateId('R'),
         loan_id, member_id,
@@ -202,6 +225,39 @@ export function StoreProvider({ children }) {
 
     deleteRepayment: async (id, reason) => {
       const { error } = await supabase.from('repayments').update({
+        deleted:     true,
+        edit_reason: reason,
+        edited_at:   new Date().toISOString(),
+      }).eq('id', id);
+      if (error) throw new Error(error.message);
+      await loadAll();
+    },
+
+    // ── Withdrawals ───────────────────────────────────────────────────────
+    addWithdrawal: async ({ member_id, amount, date, note }) => {
+      const { error } = await supabase.from('withdrawals').insert([{
+        id: generateId('W'),
+        member_id,
+        amount: Number(amount),
+        date,
+        note: note || null,
+      }]);
+      if (error) throw new Error(error.message);
+      await loadAll();
+    },
+
+    updateWithdrawal: async (id, data, reason) => {
+      const { error } = await supabase.from('withdrawals').update({
+        ...data,
+        edit_reason: reason,
+        edited_at:   new Date().toISOString(),
+      }).eq('id', id);
+      if (error) throw new Error(error.message);
+      await loadAll();
+    },
+
+    deleteWithdrawal: async (id, reason) => {
+      const { error } = await supabase.from('withdrawals').update({
         deleted:     true,
         edit_reason: reason,
         edited_at:   new Date().toISOString(),

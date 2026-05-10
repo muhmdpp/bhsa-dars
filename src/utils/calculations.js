@@ -6,11 +6,12 @@
 
 // ── Pool Balance ────────────────────────────────────────────────────────────
 
-export function getPoolBalance({ deposits, loans, repayments }) {
-  const totalDeposited = deposits.reduce((s, d) => s + d.amount, 0);
-  const totalLoaned    = loans.reduce((s, l) => s + l.amount, 0);
-  const totalRepaid    = repayments.reduce((s, r) => s + r.amount, 0);
-  return totalDeposited - totalLoaned + totalRepaid;
+export function getPoolBalance({ deposits, loans, repayments, withdrawals = [] }) {
+  const totalDeposited  = deposits.reduce((s, d) => s + d.amount, 0);
+  const totalLoaned     = loans.reduce((s, l) => s + l.amount, 0);
+  const totalRepaid     = repayments.reduce((s, r) => s + r.amount, 0);
+  const totalWithdrawn  = withdrawals.reduce((s, w) => s + w.amount, 0);
+  return totalDeposited - totalLoaned + totalRepaid - totalWithdrawn;
 }
 
 export function getTotalDeposited(deposits) {
@@ -23,6 +24,10 @@ export function getTotalLoaned(loans) {
 
 export function getTotalRepaid(repayments) {
   return repayments.reduce((s, r) => s + r.amount, 0);
+}
+
+export function getTotalWithdrawn(withdrawals = []) {
+  return withdrawals.reduce((s, w) => s + w.amount, 0);
 }
 
 // ── Loan helpers ────────────────────────────────────────────────────────────
@@ -60,32 +65,42 @@ export function getMemberLoansWithStatus(memberId, loans, repayments) {
     .sort((a, b) => new Date(b.date) - new Date(a.date));
 }
 
-// Active loans (not cleared) for a member
+// Active loans (not cleared AND remaining > 0) for a member
 export function getMemberActiveLoans(memberId, loans, repayments) {
   return getMemberLoansWithStatus(memberId, loans, repayments)
-    .filter(l => l.status !== 'cleared');
+    .filter(l => l.status !== 'cleared' && l.remaining > 0);
 }
 
 // ── Member summary ──────────────────────────────────────────────────────────
 
-export function getMemberSummary(memberId, { deposits, loans, repayments }) {
-  const memberDeposits   = deposits.filter(d => d.member_id === memberId);
-  const memberLoans      = loans.filter(l => l.member_id === memberId);
-  const memberRepayments = repayments.filter(r => r.member_id === memberId);
+export function getMemberSummary(memberId, { deposits, loans, repayments, withdrawals = [] }) {
+  const memberDeposits    = deposits.filter(d => d.member_id === memberId);
+  const memberLoans       = loans.filter(l => l.member_id === memberId);
+  const memberRepayments  = repayments.filter(r => r.member_id === memberId);
+  const memberWithdrawals = withdrawals.filter(w => w.member_id === memberId);
 
-  const totalDeposited = memberDeposits.reduce((s, d) => s + d.amount, 0);
-  const totalBorrowed  = memberLoans.reduce((s, l) => s + l.amount, 0);
-  const totalRepaid    = memberRepayments.reduce((s, r) => s + r.amount, 0);
-  const outstanding    = Math.max(0, totalBorrowed - totalRepaid);
-  const activeLoans    = memberLoans.filter(l => computeLoanStatus(l, repayments) !== 'cleared');
+  const totalDeposited  = memberDeposits.reduce((s, d) => s + d.amount, 0);
+  const totalWithdrawn  = memberWithdrawals.reduce((s, w) => s + w.amount, 0);
+  const totalBorrowed   = memberLoans.reduce((s, l) => s + l.amount, 0);
+  const totalRepaid     = memberRepayments.reduce((s, r) => s + r.amount, 0);
+  const outstanding     = Math.max(0, totalBorrowed - totalRepaid);
+  const activeLoans     = memberLoans.filter(l => computeLoanStatus(l, repayments) !== 'cleared');
+  const availableToWithdraw = Math.max(0, totalDeposited - totalWithdrawn);
 
-  return { totalDeposited, totalBorrowed, totalRepaid, outstanding, activeLoansCount: activeLoans.length };
+  return { totalDeposited, totalWithdrawn, totalBorrowed, totalRepaid, outstanding, activeLoansCount: activeLoans.length, availableToWithdraw };
+}
+
+// Member's personal deposit balance (deposits minus withdrawals) — withdrawal limit
+export function getMemberDepositBalance(memberId, deposits, withdrawals = []) {
+  const deposited  = deposits.filter(d => d.member_id === memberId).reduce((s, d) => s + d.amount, 0);
+  const withdrawn  = withdrawals.filter(w => w.member_id === memberId).reduce((s, w) => s + w.amount, 0);
+  return Math.max(0, deposited - withdrawn);
 }
 
 // ── Recent activity ─────────────────────────────────────────────────────────
 
-// Returns a unified activity list from all three tables, sorted by date desc
-export function getRecentActivity({ deposits, loans, repayments, members }, limit = 10) {
+// Returns a unified activity list from all tables, sorted by date desc
+export function getRecentActivity({ deposits, loans, repayments, withdrawals = [], members }, limit = 10) {
   const memberMap = Object.fromEntries(members.map(m => [m.id, m.name]));
 
   const all = [
@@ -117,6 +132,15 @@ export function getRecentActivity({ deposits, loans, repayments, members }, limi
       note: r.note,
       loan_id: r.loan_id,
     })),
+    ...withdrawals.map(w => ({
+      id: w.id,
+      type: 'withdrawal',
+      member_id: w.member_id,
+      memberName: memberMap[w.member_id] || 'Unknown',
+      amount: w.amount,
+      date: w.date,
+      note: w.note,
+    })),
   ];
 
   return all
@@ -127,11 +151,12 @@ export function getRecentActivity({ deposits, loans, repayments, members }, limi
 // ── Pool balance trend ──────────────────────────────────────────────────────
 
 // Returns [{date, balance}] sorted ascending — one point per unique date
-export function getPoolBalanceTrend({ deposits, loans, repayments }) {
+export function getPoolBalanceTrend({ deposits, loans, repayments, withdrawals = [] }) {
   const events = [
     ...deposits.map(d => ({ date: d.date, delta: +d.amount })),
     ...loans.map(l => ({ date: l.date, delta: -l.amount })),
     ...repayments.map(r => ({ date: r.date, delta: +r.amount })),
+    ...withdrawals.map(w => ({ date: w.date, delta: -w.amount })),
   ].sort((a, b) => new Date(a.date) - new Date(b.date));
 
   let running = 0;
@@ -171,16 +196,18 @@ export function getActiveLoanCount(loans, repayments) {
 
 // ── Daily stats (for dashboard today summary) ───────────────────────────────
 
-export function getDailyStats({ deposits, loans, repayments }, isoDate) {
+export function getDailyStats({ deposits, loans, repayments, withdrawals = [] }, isoDate) {
   const d = deposits.filter(x => x.date === isoDate);
   const l = loans.filter(x => x.date === isoDate);
   const r = repayments.filter(x => x.date === isoDate);
+  const w = withdrawals.filter(x => x.date === isoDate);
 
-  const deposited  = d.reduce((s, x) => s + x.amount, 0);
-  const loaned     = l.reduce((s, x) => s + x.amount, 0);
-  const repaid     = r.reduce((s, x) => s + x.amount, 0);
-  const net        = deposited - loaned + repaid;
-  const txnCount   = d.length + l.length + r.length;
+  const deposited   = d.reduce((s, x) => s + x.amount, 0);
+  const loaned      = l.reduce((s, x) => s + x.amount, 0);
+  const repaid      = r.reduce((s, x) => s + x.amount, 0);
+  const withdrawn   = w.reduce((s, x) => s + x.amount, 0);
+  const net         = deposited - loaned + repaid - withdrawn;
+  const txnCount    = d.length + l.length + r.length + w.length;
 
-  return { deposited, loaned, repaid, net, txnCount };
+  return { deposited, loaned, repaid, withdrawn, net, txnCount };
 }

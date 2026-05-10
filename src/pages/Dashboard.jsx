@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore';
 import {
   getPoolBalance, getTotalDeposited, getTotalLoaned, getTotalRepaid,
   getActiveLoanCount, getRecentActivity, getOutstandingLoans, getDailyStats,
+  getTotalWithdrawn,
 } from '../utils/calculations';
 import { formatCurrency, formatDate, todayISO } from '../utils/formatters';
 import StatCard from '../components/ui/StatCard';
@@ -70,6 +71,14 @@ function ActivityIcon({ type }) {
       </svg>
     </div>
   );
+  if (type === 'withdrawal') return (
+    <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+      <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    </div>
+  );
   return (
     <div className="w-8 h-8 rounded-full bg-repay-100 flex items-center justify-center flex-shrink-0">
       <svg className="w-4 h-4 text-repay-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -89,6 +98,7 @@ export default function Dashboard() {
   const totalDeposited = getTotalDeposited(state.deposits);
   const totalLoaned    = getTotalLoaned(state.loans);
   const totalRepaid    = getTotalRepaid(state.repayments);
+  const totalWithdrawn = getTotalWithdrawn(state.withdrawals);
   const activeLoans    = getActiveLoanCount(state.loans, state.repayments);
   const activity       = getRecentActivity(state, 10);
   const outstanding    = getOutstandingLoans(state);
@@ -126,10 +136,14 @@ export default function Dashboard() {
             <span className="text-xs text-slate-400">{daily.txnCount} transaction{daily.txnCount !== 1 ? 's' : ''} today</span>
           )}
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <div className="bg-credit-50 rounded-xl p-3">
             <p className="text-xs font-semibold text-credit-600 uppercase tracking-wide mb-1">Deposited</p>
             <p className="text-lg font-bold text-credit-700">{formatCurrency(daily.deposited)}</p>
+          </div>
+          <div className="bg-amber-50 rounded-xl p-3">
+            <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-1">Withdrawn</p>
+            <p className="text-lg font-bold text-amber-700">{formatCurrency(daily.withdrawn)}</p>
           </div>
           <div className="bg-loan-50 rounded-xl p-3">
             <p className="text-xs font-semibold text-loan-600 uppercase tracking-wide mb-1">Lent Out</p>
