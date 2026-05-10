@@ -17,6 +17,44 @@ export default function Members() {
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // ── Edit member modal ────────────────────────────────────────────────────
+  const [editMember, setEditMember]     = useState(null); // the member being edited
+  const [editForm, setEditForm]         = useState({ name: '', phone: '', joined_date: '' });
+  const [editError, setEditError]       = useState('');
+  const [editSaving, setEditSaving]     = useState(false);
+
+  function openEdit(e, member) {
+    e.stopPropagation();
+    setEditMember(member);
+    setEditForm({ name: member.name, phone: member.phone, joined_date: member.joined_date });
+    setEditError('');
+  }
+
+  function closeEdit() {
+    setEditMember(null);
+    setEditError('');
+  }
+
+  async function handleEditSubmit(e) {
+    e.preventDefault();
+    if (!editForm.name.trim())  { setEditError('Name is required.'); return; }
+    if (!editForm.phone.trim()) { setEditError('Phone is required.'); return; }
+    setEditSaving(true);
+    setEditError('');
+    try {
+      await actions.updateMember(editMember.id, {
+        name:        editForm.name.trim(),
+        phone:       editForm.phone.trim(),
+        joined_date: editForm.joined_date,
+      });
+      closeEdit();
+    } catch (err) {
+      setEditError(err.message || 'Failed to update member.');
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
   const members = state.members
     .filter(m => {
       const matchSearch =
@@ -226,6 +264,13 @@ export default function Members() {
                           Ledger
                         </button>
                         <button
+                          id={`edit-member-${m.id}`}
+                          onClick={e => openEdit(e, m)}
+                          className="text-xs text-slate-500 hover:text-slate-800 font-medium"
+                        >
+                          Edit
+                        </button>
+                        <button
                           onClick={e => handleToggleStatus(e, m)}
                           className={`text-xs font-medium ${
                             m.status === 'active'
@@ -244,6 +289,100 @@ export default function Members() {
           </table>
         </div>
       </div>
+
+      {/* ── Edit Member Modal ─────────────────────────────────────────────── */}
+      {editMember && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(15,23,42,0.45)' }}
+          onClick={closeEdit}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-5 animate-slide-up"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">Edit Member</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{editMember.id}</p>
+              </div>
+              <button
+                onClick={closeEdit}
+                className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div>
+                <label className="form-label" htmlFor="edit-member-name">Full Name *</label>
+                <input
+                  id="edit-member-name"
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. Abdullah Karimi"
+                  value={editForm.name}
+                  onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="form-label" htmlFor="edit-member-phone">Phone *</label>
+                <input
+                  id="edit-member-phone"
+                  type="tel"
+                  className="form-input"
+                  placeholder="9876543210"
+                  value={editForm.phone}
+                  onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="form-label" htmlFor="edit-member-joined">Joined Date</label>
+                <input
+                  id="edit-member-joined"
+                  type="date"
+                  className="form-input"
+                  value={editForm.joined_date}
+                  onChange={e => setEditForm(f => ({ ...f, joined_date: e.target.value }))}
+                />
+              </div>
+
+              {editError && (
+                <p className="text-sm text-red-600">{editError}</p>
+              )}
+
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="submit"
+                  id="save-edit-member-btn"
+                  className="btn-primary"
+                  disabled={editSaving}
+                >
+                  {editSaving ? (
+                    <span className="flex items-center gap-2">
+                      <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                      Saving…
+                    </span>
+                  ) : 'Save Changes'}
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={closeEdit}
+                  disabled={editSaving}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
