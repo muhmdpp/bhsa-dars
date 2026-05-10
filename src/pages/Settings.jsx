@@ -10,8 +10,9 @@ export default function Settings() {
   const [confirmPin, setConfirmPin] = useState('');
   const [pinError, setPinError]     = useState('');
   const [pinSuccess, setPinSuccess] = useState(false);
+  const [pinSaving, setPinSaving]   = useState(false);
 
-  function handlePinChange(e) {
+  async function handlePinChange(e) {
     e.preventDefault();
     setPinError('');
     setPinSuccess(false);
@@ -24,15 +25,23 @@ export default function Settings() {
       setPinError('New PIN and confirmation do not match.');
       return;
     }
-    const ok = changePin(currentPin, newPin);
-    if (!ok) {
-      setPinError('Current PIN is incorrect.');
-      return;
+
+    setPinSaving(true);
+    try {
+      const ok = await changePin(currentPin, newPin);
+      if (!ok) {
+        setPinError('Current PIN is incorrect.');
+        return;
+      }
+      setPinSuccess(true);
+      setCurrentPin('');
+      setNewPin('');
+      setConfirmPin('');
+    } catch (err) {
+      setPinError(err.message || 'Failed to update PIN. Try again.');
+    } finally {
+      setPinSaving(false);
     }
-    setPinSuccess(true);
-    setCurrentPin('');
-    setNewPin('');
-    setConfirmPin('');
   }
 
   return (
@@ -111,8 +120,13 @@ export default function Settings() {
             />
           </div>
           {pinError && <p className="text-sm text-red-600">{pinError}</p>}
-          <button type="submit" id="save-pin-btn" className="btn-primary">
-            Update PIN
+          <button type="submit" id="save-pin-btn" className="btn-primary" disabled={pinSaving}>
+            {pinSaving ? (
+              <span className="flex items-center gap-2">
+                <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                Saving…
+              </span>
+            ) : 'Update PIN'}
           </button>
         </form>
       </div>

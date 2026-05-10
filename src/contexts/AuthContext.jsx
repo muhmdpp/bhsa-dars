@@ -1,11 +1,14 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { supabase } from '../lib/supabase';
 
 const ADMIN_EMAIL    = import.meta.env.VITE_ADMIN_EMAIL    || '';
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || '';
 
 const DEFAULT_PIN   = '2608';
-const PIN_STORAGE   = 'bhsa_pin';
 const LOGIN_STORAGE = 'bhsa_logged_in';
+
+// Remove any legacy localStorage PIN so old devices don't diverge
+localStorage.removeItem('bhsa_pin');
 
 const AuthContext = createContext(null);
 
@@ -13,13 +16,24 @@ export function AuthProvider({ children }) {
   const [loggedIn, setLoggedIn]   = useState(() => sessionStorage.getItem(LOGIN_STORAGE) === 'true');
   const [pinLocked, setPinLocked] = useState(true); // always starts locked each session
   const [pinReady, setPinReady]   = useState(false);
+  const [pin, setPin]             = useState(DEFAULT_PIN); // in-memory cache
 
-  // Ensure default PIN is set
+  // ── Fetch PIN from Supabase on mount ────────────────────────────────────
   useEffect(() => {
-    if (!localStorage.getItem(PIN_STORAGE)) {
-      localStorage.setItem(PIN_STORAGE, DEFAULT_PIN);
+    async function fetchPin() {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('pin')
+        .eq('id', 'global')
+        .single();
+
+      if (!error && data?.pin) {
+        setPin(data.pin);
+      }
+      // If fetch fails, fall back to DEFAULT_PIN already set in state
+      setPinReady(true);
     }
-    setPinReady(true);
+    fetchPin();
   }, []);
 
   // ── Email login ─────────────────────────────────────────────────────────
@@ -41,28 +55,33 @@ export function AuthProvider({ children }) {
 
   // ── PIN lock ─────────────────────────────────────────────────────────────
   const unlockWithPin = useCallback((enteredPin) => {
-    const storedPin = localStorage.getItem(PIN_STORAGE) || DEFAULT_PIN;
-    if (enteredPin === storedPin) {
+    if (enteredPin === pin) {
       setPinLocked(false);
       return true;
     }
     return false;
-  }, []);
+  }, [pin]);
 
   const lockScreen = useCallback(() => {
     setPinLocked(true);
   }, []);
 
-  const changePin = useCallback((currentPin, newPin) => {
-    const storedPin = localStorage.getItem(PIN_STORAGE) || DEFAULT_PIN;
-    if (currentPin !== storedPin) return false;
-    localStorage.setItem(PIN_STORAGE, newPin);
-    return true;
-  }, []);
+  // async — updates Supabase then refreshes in-memory cache
+  const changePin = useCallback(async (currentPin, newPin) => {
+    if (currentPin !== pin) return false;
 
-  const getCurrentPin = useCallback(() => {
-    return localStorage.getItem(PIN_STORAGE) || DEFAULT_PIN;
-  }, []);
+    const { error } = await supabase
+      .from('settings')
+      .update({ pin: newPin })
+      .eq('id', 'global');
+
+    if (error) throw new Error(error.message);
+
+    setPin(newPin); // keep in-memory cache in sync
+    return true;
+  }, [pin]);
+
+  const getCurrentPin = useCallback(() => pin, [pin]);
 
   return (
     <AuthContext.Provider value={{
