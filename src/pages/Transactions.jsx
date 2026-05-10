@@ -3,7 +3,8 @@ import { useStore } from '../store/useStore';
 import { formatCurrency, formatDate } from '../utils/formatters';
 
 // ── Edit Modal ───────────────────────────────────────────────────────────────
-function EditModal({ txn, type, onClose, onSave }) {
+function EditModal({ txn, type, members, onClose, onSave }) {
+  const [memberId, setMemberId] = useState(txn.member_id);
   const [amount, setAmount]   = useState(String(txn.amount));
   const [date, setDate]       = useState(txn.date);
   const [note, setNote]       = useState(txn.note || txn.reason || '');
@@ -18,7 +19,7 @@ function EditModal({ txn, type, onClose, onSave }) {
     setSaving(true);
     setError('');
     try {
-      const updates = { amount: Number(amount), date };
+      const updates = { amount: Number(amount), date, member_id: memberId };
       if (type === 'loan')   updates.reason = note;
       else                   updates.note   = note;
       await onSave(txn.id, updates, reason.trim());
@@ -46,6 +47,20 @@ function EditModal({ txn, type, onClose, onSave }) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {/* Member */}
+          <div>
+            <label className="form-label">Member</label>
+            <select
+              className="form-input"
+              value={memberId}
+              onChange={e => setMemberId(e.target.value)}
+            >
+              {members.map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="form-label">Amount (₹)</label>
@@ -371,6 +386,7 @@ export default function Transactions() {
         <EditModal
           txn={editTarget}
           type={activeTab.slice(0, -1)}
+          members={state.members}
           onClose={() => setEditTarget(null)}
           onSave={handleEditSave}
         />
