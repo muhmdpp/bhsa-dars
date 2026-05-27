@@ -74,6 +74,21 @@ export function StoreProvider({ children }) {
       await loadAll();
     },
 
+    // Hard-delete a member and every record tied to them
+    deleteMemberPermanently: async (id) => {
+      const { error: e1 } = await supabase.from('withdrawals').delete().eq('member_id', id);
+      if (e1) throw new Error(e1.message);
+      const { error: e2 } = await supabase.from('repayments').delete().eq('member_id', id);
+      if (e2) throw new Error(e2.message);
+      const { error: e3 } = await supabase.from('deposits').delete().eq('member_id', id);
+      if (e3) throw new Error(e3.message);
+      const { error: e4 } = await supabase.from('loans').delete().eq('member_id', id);
+      if (e4) throw new Error(e4.message);
+      const { error: e5 } = await supabase.from('members').delete().eq('id', id);
+      if (e5) throw new Error(e5.message);
+      await loadAll();
+    },
+
     // ── Deposits ─────────────────────────────────────────────────────────
     addDeposit: async ({ member_id, amount, date, note }) => {
       const { error } = await supabase.from('deposits').insert([{
