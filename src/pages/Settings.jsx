@@ -171,6 +171,19 @@ export default function Settings() {
           </button>
         </div>
       </div>
+
+      {/* Mobile Footer Info */}
+      <div className="md:hidden pt-8 pb-4">
+        <p className="text-xs text-slate-400 text-center">BHSA Finance System v1.1.0</p>
+        <a
+          href="https://www.watermelonbranding.in"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block text-center text-[10px] text-slate-400 hover:text-slate-600 transition-colors mt-1"
+        >
+          Developed by <span className="font-semibold text-slate-500">Watermelon</span>
+        </a>
+      </div>
     </div>
   );
 }
