@@ -4,6 +4,7 @@ import { useStore } from '../store/useStore';
 import { getMemberSummary } from '../utils/calculations';
 import { formatCurrency, formatDate, todayISO } from '../utils/formatters';
 import Badge from '../components/ui/Badge';
+import { BATCH_NUMBERS, getBatchColors } from '../utils/batchConfig';
 
 export default function Members() {
   const { state, actions } = useStore();
@@ -13,20 +14,20 @@ export default function Members() {
   const [showForm, setShowForm] = useState(false);
   const [sortBy, setSortBy] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
-  const [form, setForm] = useState({ name: '', phone: '', joined_date: todayISO() });
+  const [form, setForm] = useState({ name: '', phone: '', joined_date: todayISO(), batch: '' });
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
 
   // ── Edit member modal ────────────────────────────────────────────────────
   const [editMember, setEditMember]     = useState(null); // the member being edited
-  const [editForm, setEditForm]         = useState({ name: '', phone: '', joined_date: '' });
+  const [editForm, setEditForm]         = useState({ name: '', phone: '', joined_date: '', batch: '' });
   const [editError, setEditError]       = useState('');
   const [editSaving, setEditSaving]     = useState(false);
 
   function openEdit(e, member) {
     e.stopPropagation();
     setEditMember(member);
-    setEditForm({ name: member.name, phone: member.phone, joined_date: member.joined_date });
+    setEditForm({ name: member.name, phone: member.phone, joined_date: member.joined_date, batch: member.batch || '' });
     setEditError('');
   }
 
@@ -46,6 +47,7 @@ export default function Members() {
         name:        editForm.name.trim(),
         phone:       editForm.phone.trim(),
         joined_date: editForm.joined_date,
+        batch:       editForm.batch ? Number(editForm.batch) : null,
       });
       closeEdit();
     } catch (err) {
@@ -86,11 +88,12 @@ export default function Members() {
     e.preventDefault();
     if (!form.name.trim()) { setFormError('Name is required'); return; }
     if (!form.phone.trim()) { setFormError('Phone is required'); return; }
+    if (!form.batch)        { setFormError('Batch number is required'); return; }
     setSaving(true);
     setFormError('');
     try {
       await actions.addMember(form);
-      setForm({ name: '', phone: '', joined_date: todayISO() });
+      setForm({ name: '', phone: '', joined_date: todayISO(), batch: '' });
       setShowForm(false);
     } catch (err) {
       setFormError(err.message);
@@ -130,7 +133,7 @@ export default function Members() {
       {showForm && (
         <div className="card p-5 border-slate-200 animate-slide-up">
           <h2 className="text-base font-semibold text-slate-900 mb-4">New Member</h2>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div>
               <label className="form-label">Full Name *</label>
               <input
@@ -157,12 +160,26 @@ export default function Members() {
                 onChange={e => setForm(f => ({ ...f, joined_date: e.target.value }))}
               />
             </div>
+            <div>
+              <label className="form-label">Batch No. *</label>
+              <select
+                id="member-batch"
+                className="form-input"
+                value={form.batch}
+                onChange={e => setForm(f => ({ ...f, batch: e.target.value }))}
+              >
+                <option value="">Select batch…</option>
+                {BATCH_NUMBERS.map(n => (
+                  <option key={n} value={n}>Batch {n}</option>
+                ))}
+              </select>
+            </div>
             {formError && (
-              <div className="sm:col-span-3">
+              <div className="sm:col-span-4">
                 <p className="text-sm text-loan-600">{formError}</p>
               </div>
             )}
-            <div className="sm:col-span-3 flex gap-3">
+            <div className="sm:col-span-4 flex gap-3">
               <button type="submit" className="btn-primary" disabled={saving}>
                 {saving ? (
                   <span className="flex items-center gap-2">
@@ -243,7 +260,16 @@ export default function Members() {
               ) : (
                 members.map(m => (
                   <tr key={m.id} className="cursor-pointer" onClick={() => navigate(`/members/${m.id}`)}>
-                    <td className="font-medium text-slate-900">{m.name}</td>
+                    <td className="font-medium text-slate-900">
+                      <div className="flex items-center gap-2">
+                        <span>{m.name}</span>
+                        {m.batch && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${getBatchColors(m.batch).chip}`}>
+                            B{m.batch}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="text-slate-500">{m.phone}</td>
                     <td className="text-slate-500">{formatDate(m.joined_date)}</td>
                     <td className="font-medium text-credit-600">{formatCurrency(m.totalDeposited)}</td>
@@ -350,6 +376,20 @@ export default function Members() {
                   value={editForm.joined_date}
                   onChange={e => setEditForm(f => ({ ...f, joined_date: e.target.value }))}
                 />
+              </div>
+              <div>
+                <label className="form-label" htmlFor="edit-member-batch">Batch No. *</label>
+                <select
+                  id="edit-member-batch"
+                  className="form-input"
+                  value={editForm.batch}
+                  onChange={e => setEditForm(f => ({ ...f, batch: e.target.value }))}
+                >
+                  <option value="">Select batch…</option>
+                  {BATCH_NUMBERS.map(n => (
+                    <option key={n} value={n}>Batch {n}</option>
+                  ))}
+                </select>
               </div>
 
               {editError && (

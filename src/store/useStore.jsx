@@ -58,10 +58,11 @@ export function StoreProvider({ children }) {
   const actions = {
 
     // ── Members ──────────────────────────────────────────────────────────
-    addMember: async ({ name, phone, joined_date }) => {
+    addMember: async ({ name, phone, joined_date, batch }) => {
       const { error } = await supabase.from('members').insert([{
         id: generateId('M'),
         name, phone, joined_date, status: 'active',
+        batch: batch ? Number(batch) : null,
       }]);
       if (error) throw new Error(error.message);
       await loadAll();

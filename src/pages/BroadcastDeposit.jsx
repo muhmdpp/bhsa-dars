@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import { formatCurrency, todayISO } from '../utils/formatters';
+import { getBatchColors } from '../utils/batchConfig';
 
 const STEPS = ['Amount & Date', 'Select Members', 'Review & Confirm'];
 
@@ -43,6 +44,32 @@ export default function BroadcastDeposit() {
     if (selected.size === activeMembers.length) setSelected(new Set());
     else setSelected(new Set(activeMembers.map(m => m.id)));
   }
+
+  function toggleBatch(batchNum) {
+    const batchMembers = activeMembers.filter(m => m.batch === batchNum);
+    const allSelected  = batchMembers.every(m => selected?.has(m.id));
+    setSelected(prev => {
+      const next = new Set(prev);
+      batchMembers.forEach(m => {
+        if (allSelected) next.delete(m.id);
+        else next.add(m.id);
+      });
+      return next;
+    });
+  }
+
+  // Group active members by batch, sorted batch ascending
+  const membersByBatch = useMemo(() => {
+    const groups = {};
+    activeMembers.forEach(m => {
+      const b = m.batch ?? 0;
+      if (!groups[b]) groups[b] = [];
+      groups[b].push(m);
+    });
+    return Object.entries(groups)
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([batch, members]) => ({ batch: Number(batch), members }));
+  }, [activeMembers]);
 
   const selectedMembers = useMemo(
     () => activeMembers.filter(m => selected?.has(m.id)),
@@ -201,25 +228,57 @@ export default function BroadcastDeposit() {
             </button>
           </div>
 
-          <div className="divide-y divide-slate-50 max-h-[360px] overflow-y-auto">
-            {activeMembers.map(m => (
-              <label key={m.id}
-                className="flex items-center gap-3 px-5 py-3 cursor-pointer hover:bg-slate-50 transition-colors">
-                <input
-                  type="checkbox"
-                  className="w-4 h-4 accent-credit-600 rounded"
-                  checked={selected?.has(m.id) ?? false}
-                  onChange={() => toggleMember(m.id)}
-                />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-800">{m.name}</p>
-                  <p className="text-xs text-slate-400">{m.phone || m.id}</p>
+          <div className="divide-y divide-slate-100 max-h-[400px] overflow-y-auto">
+            {membersByBatch.map(({ batch, members: batchMembers }) => {
+              const colors       = getBatchColors(batch);
+              const selCount     = batchMembers.filter(m => selected?.has(m.id)).length;
+              const batchAllSel  = selCount === batchMembers.length;
+              return (
+                <div key={batch}>
+                  {/* Batch group header */}
+                  <div className={`px-5 py-2 flex items-center justify-between border-b ${colors.header}`}>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${colors.chip}`}>
+                        Batch {batch}
+                      </span>
+                      <span className="text-xs text-slate-400">
+                        {selCount}/{batchMembers.length} selected
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => toggleBatch(batch)}
+                      className={`text-xs font-semibold transition-colors ${colors.toggle}`}
+                    >
+                      {batchAllSel ? 'Deselect all' : 'Select all'}
+                    </button>
+                  </div>
+
+                  {/* Members in this batch */}
+                  {batchMembers.map(m => (
+                    <label
+                      key={m.id}
+                      className="flex items-center gap-3 px-5 py-3 cursor-pointer hover:bg-slate-50 transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 accent-credit-600 rounded"
+                        checked={selected?.has(m.id) ?? false}
+                        onChange={() => toggleMember(m.id)}
+                      />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-slate-800">{m.name}</p>
+                        <p className="text-xs text-slate-400">{m.phone || m.id}</p>
+                      </div>
+                      {selected?.has(m.id) && (
+                        <span className="text-xs font-semibold text-credit-600">
+                          {formatCurrency(Number(amount))}
+                        </span>
+                      )}
+                    </label>
+                  ))}
                 </div>
-                {selected?.has(m.id) && (
-                  <span className="text-xs font-semibold text-credit-600">{formatCurrency(Number(amount))}</span>
-                )}
-              </label>
-            ))}
+              );
+            })}
           </div>
 
           <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
