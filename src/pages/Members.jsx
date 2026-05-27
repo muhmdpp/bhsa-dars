@@ -38,8 +38,8 @@ export default function Members() {
 
   async function handleEditSubmit(e) {
     e.preventDefault();
-    if (!editForm.name.trim())  { setEditError('Name is required.'); return; }
-    if (!editForm.phone.trim()) { setEditError('Phone is required.'); return; }
+    if (!editForm.name.trim())                          { setEditError('Name is required.'); return; }
+    if (!/^\d{10}$/.test(editForm.phone.trim()))         { setEditError('Phone must be exactly 10 digits.'); return; }
     setEditSaving(true);
     setEditError('');
     try {
@@ -86,9 +86,9 @@ export default function Members() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.name.trim()) { setFormError('Name is required'); return; }
-    if (!form.phone.trim()) { setFormError('Phone is required'); return; }
-    if (!form.batch)        { setFormError('Batch number is required'); return; }
+    if (!form.name.trim())                        { setFormError('Name is required'); return; }
+    if (!/^\d{10}$/.test(form.phone.trim()))       { setFormError('Phone must be exactly 10 digits'); return; }
+    if (!form.batch)                               { setFormError('Batch number is required'); return; }
     setSaving(true);
     setFormError('');
     try {
