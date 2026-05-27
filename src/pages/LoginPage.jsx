@@ -31,11 +31,8 @@ export default function LoginPage() {
       <div className="relative w-full max-w-sm">
         {/* Logo card */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-slate-700 to-slate-600 border border-slate-600 shadow-2xl mb-4">
-            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-            </svg>
+          <div className="inline-flex items-center justify-center w-24 h-24 rounded-2xl bg-white shadow-2xl mb-4 p-2">
+            <img src="/logo.png" alt="BHSA Logo" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-2xl font-bold text-white">BHSA Finance</h1>
           <p className="text-sm text-slate-400 mt-1">Admin Portal — Sign in to continue</p>
