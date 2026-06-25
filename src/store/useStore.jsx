@@ -277,6 +277,16 @@ export function StoreProvider({ children }) {
       if (error) throw new Error(error.message);
       await loadAll();
     },
+
+    // ── Member PIN ────────────────────────────────────────────────────────
+    setMemberPin: async (memberId, pin) => {
+      const { error } = await supabase
+        .from('members')
+        .update({ pin })
+        .eq('id', memberId);
+      if (error) throw new Error(error.message);
+      await loadAll();
+    },
   };
 
   return (

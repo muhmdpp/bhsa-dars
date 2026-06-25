@@ -24,6 +24,13 @@ export default function Members() {
   const [editError, setEditError]       = useState('');
   const [editSaving, setEditSaving]     = useState(false);
 
+  // ── Set PIN modal ─────────────────────────────────────────────────────────
+  const [pinMember, setPinMember]   = useState(null);
+  const [pinValue, setPinValue]     = useState('');
+  const [pinError, setPinError]     = useState('');
+  const [pinSaving, setPinSaving]   = useState(false);
+  const [pinSuccess, setPinSuccess] = useState(false);
+
   function openEdit(e, member) {
     e.stopPropagation();
     setEditMember(member);
@@ -34,6 +41,36 @@ export default function Members() {
   function closeEdit() {
     setEditMember(null);
     setEditError('');
+  }
+
+  function openPin(e, member) {
+    e.stopPropagation();
+    setPinMember(member);
+    setPinValue('');
+    setPinError('');
+    setPinSuccess(false);
+  }
+
+  function closePin() {
+    setPinMember(null);
+    setPinValue('');
+    setPinError('');
+    setPinSuccess(false);
+  }
+
+  async function handlePinSubmit(e) {
+    e.preventDefault();
+    if (!/^\d{4}$/.test(pinValue)) { setPinError('PIN must be exactly 4 digits.'); return; }
+    setPinSaving(true);
+    setPinError('');
+    try {
+      await actions.setMemberPin(pinMember.id, pinValue);
+      setPinSuccess(true);
+    } catch (err) {
+      setPinError(err.message || 'Failed to set PIN.');
+    } finally {
+      setPinSaving(false);
+    }
   }
 
   async function handleEditSubmit(e) {
@@ -309,6 +346,13 @@ export default function Members() {
                           Edit
                         </button>
                         <button
+                          id={`set-pin-${m.id}`}
+                          onClick={e => openPin(e, m)}
+                          className="text-xs text-indigo-500 hover:text-indigo-800 font-medium"
+                        >
+                          Set PIN
+                        </button>
+                        <button
                           onClick={e => handleToggleStatus(e, m)}
                           className={`text-xs font-medium ${
                             m.status === 'active'
@@ -328,6 +372,83 @@ export default function Members() {
         </div>
       </div>
 
+      {/* ── Set PIN Modal ──────────────────────────────────────────────────── */}
+      {pinMember && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(15,23,42,0.45)' }}
+          onClick={closePin}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-full max-w-xs p-6 space-y-5 animate-slide-up"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">Set Member PIN</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{pinMember.name}</p>
+              </div>
+              <button
+                onClick={closePin}
+                className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {pinSuccess ? (
+              <div className="text-center py-4 space-y-3">
+                <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mx-auto">
+                  <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <p className="text-sm font-semibold text-slate-800">PIN set successfully!</p>
+                <p className="text-xs text-slate-500">Share <span className="font-bold text-slate-700">{pinValue}</span> with {pinMember.name}.</p>
+                <button className="btn-secondary w-full" onClick={closePin}>Done</button>
+              </div>
+            ) : (
+              <form onSubmit={handlePinSubmit} className="space-y-4">
+                <div>
+                  <label className="form-label" htmlFor="pin-input">4-Digit PIN *</label>
+                  <input
+                    id="pin-input"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={4}
+                    className="form-input tracking-[0.5em] text-center text-xl font-bold"
+                    placeholder="0000"
+                    value={pinValue}
+                    onChange={e => { setPinValue(e.target.value.replace(/\D/g, '').slice(0, 4)); setPinError(''); }}
+                    autoFocus
+                  />
+                  <p className="text-xs text-slate-400 mt-1">Enter any 4-digit number to assign to this member.</p>
+                </div>
+                {pinError && <p className="text-sm text-red-600">{pinError}</p>}
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    id="save-pin-btn"
+                    className="btn-primary flex-1"
+                    disabled={pinSaving || pinValue.length < 4}
+                  >
+                    {pinSaving ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                        Saving…
+                      </span>
+                    ) : 'Save PIN'}
+                  </button>
+                  <button type="button" className="btn-secondary" onClick={closePin} disabled={pinSaving}>Cancel</button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Edit Member Modal ─────────────────────────────────────────────── */}
       {editMember && (
         <div
@@ -335,6 +456,7 @@ export default function Members() {
           style={{ backgroundColor: 'rgba(15,23,42,0.45)' }}
           onClick={closeEdit}
         >
+
           <div
             className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-5 animate-slide-up"
             onClick={e => e.stopPropagation()}

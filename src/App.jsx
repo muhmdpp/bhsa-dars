@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/layout/Layout';
 import LoginPage from './pages/LoginPage';
 import PinLockScreen from './pages/PinLockScreen';
+import MemberPortal from './pages/MemberPortal';
 import Dashboard from './pages/Dashboard';
 import Members from './pages/Members';
 import MemberLedger from './pages/MemberLedger';
@@ -17,9 +18,12 @@ import BroadcastDeposit from './pages/BroadcastDeposit';
 import Settings from './pages/Settings';
 
 function AppInner() {
-  const { loggedIn, pinLocked, pinReady } = useAuth();
+  const { loggedIn, pinLocked, pinReady, memberSession } = useAuth();
 
   if (!pinReady) return null; // brief init
+
+  // Member portal session takes priority over admin flow
+  if (memberSession) return <MemberPortal />;
 
   if (!loggedIn)  return <LoginPage />;
   if (pinLocked)  return <PinLockScreen />;
