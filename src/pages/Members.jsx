@@ -240,6 +240,12 @@ export default function Members() {
                 <th onClick={() => toggleSort('totalDeposited')} className="cursor-pointer select-none">
                   Deposited <SortIcon col="totalDeposited" />
                 </th>
+                <th onClick={() => toggleSort('totalWithdrawn')} className="cursor-pointer select-none">
+                  Withdrawn <SortIcon col="totalWithdrawn" />
+                </th>
+                <th onClick={() => toggleSort('availableToWithdraw')} className="cursor-pointer select-none">
+                  Balance <SortIcon col="availableToWithdraw" />
+                </th>
                 <th onClick={() => toggleSort('totalBorrowed')} className="cursor-pointer select-none">
                   Borrowed <SortIcon col="totalBorrowed" />
                 </th>
@@ -253,7 +259,7 @@ export default function Members() {
             <tbody>
               {members.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center text-slate-400 py-10">
+                  <td colSpan={10} className="text-center text-slate-400 py-10">
                     {state.members.length === 0 ? 'No members yet — add your first member above' : 'No members match your search'}
                   </td>
                 </tr>
@@ -273,6 +279,12 @@ export default function Members() {
                     <td className="text-slate-500">{m.phone}</td>
                     <td className="text-slate-500">{formatDate(m.joined_date)}</td>
                     <td className="font-medium text-credit-600">{formatCurrency(m.totalDeposited)}</td>
+                    <td className="font-medium text-amber-600">{m.totalWithdrawn > 0 ? formatCurrency(m.totalWithdrawn) : <span className="text-slate-400">—</span>}</td>
+                    <td className="font-semibold">
+                      <span className={m.availableToWithdraw > 0 ? 'text-emerald-600' : 'text-slate-400'}>
+                        {formatCurrency(m.availableToWithdraw)}
+                      </span>
+                    </td>
                     <td className="font-medium text-loan-600">{formatCurrency(m.totalBorrowed)}</td>
                     <td className="font-semibold">
                       {m.outstanding > 0

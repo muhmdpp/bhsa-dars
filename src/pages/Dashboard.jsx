@@ -163,7 +163,7 @@ export default function Dashboard() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard
           title="Total Deposited"
           value={formatCurrency(totalDeposited)}
@@ -174,6 +174,33 @@ export default function Dashboard() {
             </svg>
           }
         />
+        <StatCard
+          title="Total Withdrawn"
+          value={formatCurrency(totalWithdrawn)}
+          color="debit"
+          icon={
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          }
+        />
+        <StatCard
+          title="Balance"
+          value={formatCurrency(totalDeposited - totalWithdrawn)}
+          subtitle="deposited − withdrawn"
+          color={totalDeposited - totalWithdrawn >= 0 ? 'credit' : 'loan'}
+          icon={
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+            </svg>
+          }
+        />
+      </div>
+
+      {/* Loan & repayment cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard
           title="Total Lent Out"
           value={formatCurrency(totalLoaned)}
@@ -226,7 +253,7 @@ export default function Dashboard() {
                   <ActivityIcon type={item.type} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-800 truncate">{item.memberName}</p>
-                    <p className="text-xs text-slate-400 truncate">{item.note || (item.type === 'deposit' ? 'Deposit' : item.type === 'loan' ? 'Loan issued' : 'Repayment')}</p>
+                    <p className="text-xs text-slate-400 truncate">{item.note || (item.type === 'deposit' ? 'Deposit' : item.type === 'loan' ? 'Loan issued' : item.type === 'withdrawal' ? 'Withdrawal' : 'Repayment')}</p>
                   </div>
                   <div className="text-right flex-shrink-0">
                     <p className={`text-sm font-semibold ${
