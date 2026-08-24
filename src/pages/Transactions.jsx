@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import { formatCurrency, formatDate } from '../utils/formatters';
+import Pagination from '../components/ui/Pagination';
 
 // ── Edit Modal ───────────────────────────────────────────────────────────────
 function EditModal({ txn, type, members, onClose, onSave }) {
@@ -251,6 +252,8 @@ export default function Transactions() {
   const { state, actions } = useStore();
   const [activeTab, setActiveTab] = useState('deposits');
   const [search, setSearch]       = useState('');
+  const [page, setPage]           = useState(1);
+  const [pageSize, setPageSize]   = useState(100);
   const [editTarget, setEditTarget]     = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
@@ -274,6 +277,11 @@ export default function Transactions() {
     const raw = state[activeTab] || [];
     return raw.reduce((s, t) => s + t.amount, 0);
   }, [state, activeTab]);
+
+  const paginatedData = useMemo(() => {
+    const from = (page - 1) * pageSize;
+    return currentData.slice(from, from + pageSize);
+  }, [currentData, page, pageSize]);
 
   // Edit save handlers
   async function handleEditSave(id, updates, reason) {
@@ -308,7 +316,7 @@ export default function Transactions() {
             placeholder="Search member, ID or note…"
             className="form-input pl-9 w-64"
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
       </div>
@@ -320,7 +328,7 @@ export default function Transactions() {
             <button
               key={tab.key}
               id={`tab-${tab.key}`}
-              onClick={() => { setActiveTab(tab.key); setSearch(''); }}
+              onClick={() => { setActiveTab(tab.key); setSearch(''); setPage(1); }}
               className={`px-5 py-3.5 text-sm font-semibold transition-colors border-b-2 -mb-px ${
                 activeTab === tab.key
                   ? `${tab.color} border-current`
@@ -365,7 +373,7 @@ export default function Transactions() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {currentData.map(txn => (
+                {paginatedData.map(txn => (
                   <TxnRow
                     key={txn.id}
                     txn={txn}
@@ -379,6 +387,15 @@ export default function Transactions() {
             </table>
           )}
         </div>
+
+        {/* Pagination */}
+        <Pagination
+          currentPage={page}
+          totalItems={currentData.length}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(newSize) => { setPageSize(newSize); setPage(1); }}
+        />
       </div>
 
       {/* Modals */}

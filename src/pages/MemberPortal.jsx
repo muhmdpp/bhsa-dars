@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { supabase, fetchAllRows } from '../lib/supabase';
 import { formatCurrency, formatDate } from '../utils/formatters';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -23,8 +23,8 @@ function TimelineItem({ item }) {
   const sign  = (isLoan || isWithdrawal) ? '−' : '+';
   const label = isDeposit    ? 'Deposit'
               : isWithdrawal ? 'Withdrawal'
-              : isLoan       ? `Loan issued`
-              : `Loan repayment`;
+              : isLoan       ? 'Loan issued'
+              : 'Loan repayment';
 
   return (
     <div className="flex gap-4 group">
@@ -70,7 +70,7 @@ function SummaryCard({ label, value, colorClass, bgClass, borderClass }) {
 
 export default function MemberPortal() {
   const { memberSession, memberLogout } = useAuth();
-  const { memberId, memberName } = memberSession;
+  const { memberId, memberName } = memberSession || {};
 
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
@@ -80,24 +80,19 @@ export default function MemberPortal() {
     async function load() {
       setLoading(true);
       try {
-        const [dRes, wRes, lRes, rRes] = await Promise.all([
-          supabase.from('deposits').select('*').eq('member_id', memberId).neq('deleted', true).order('date', { ascending: true }),
-          supabase.from('withdrawals').select('*').eq('member_id', memberId).neq('deleted', true).order('date', { ascending: true }),
-          supabase.from('loans').select('*').eq('member_id', memberId).neq('deleted', true).order('date', { ascending: true }),
-          supabase.from('repayments').select('*').eq('member_id', memberId).neq('deleted', true).order('date', { ascending: true }),
+        const [d, w, l, r] = await Promise.all([
+          fetchAllRows('deposits', q => q.eq('member_id', memberId).neq('deleted', true).order('date', { ascending: true })),
+          fetchAllRows('withdrawals', q => q.eq('member_id', memberId).neq('deleted', true).order('date', { ascending: true })),
+          fetchAllRows('loans', q => q.eq('member_id', memberId).neq('deleted', true).order('date', { ascending: true })),
+          fetchAllRows('repayments', q => q.eq('member_id', memberId).neq('deleted', true).order('date', { ascending: true })),
         ]);
-
-        if (dRes.error) throw new Error(dRes.error.message);
-        if (wRes.error) throw new Error(wRes.error.message);
-        if (lRes.error) throw new Error(lRes.error.message);
-        if (rRes.error) throw new Error(rRes.error.message);
 
         const normalise = r => ({ ...r, amount: Number(r.amount) });
         setData({
-          deposits:    dRes.data.map(normalise),
-          withdrawals: wRes.data.map(normalise),
-          loans:       lRes.data.map(normalise),
-          repayments:  rRes.data.map(normalise),
+          deposits:    d.map(normalise),
+          withdrawals: w.map(normalise),
+          loans:       l.map(normalise),
+          repayments:  r.map(normalise),
         });
       } catch (err) {
         setError(err.message);

@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { getMemberSummary } from '../utils/calculations';
 import { formatCurrency, formatDate, todayISO } from '../utils/formatters';
 import Badge from '../components/ui/Badge';
+import Pagination from '../components/ui/Pagination';
 import { BATCH_NUMBERS, getBatchColors } from '../utils/batchConfig';
 
 export default function Members() {
@@ -11,6 +12,8 @@ export default function Members() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(100);
   const [showForm, setShowForm] = useState(false);
   const [sortBy, setSortBy] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
@@ -94,22 +97,29 @@ export default function Members() {
     }
   }
 
-  const members = state.members
-    .filter(m => {
-      const matchSearch =
-        m.name.toLowerCase().includes(search.toLowerCase()) ||
-        m.phone.includes(search);
-      const matchStatus = statusFilter === 'all' || m.status === statusFilter;
-      return matchSearch && matchStatus;
-    })
-    .map(m => ({ ...m, ...getMemberSummary(m.id, state) }))
-    .sort((a, b) => {
-      let aVal = a[sortBy] ?? '';
-      let bVal = b[sortBy] ?? '';
-      if (typeof aVal === 'string') aVal = aVal.toLowerCase();
-      if (typeof bVal === 'string') bVal = bVal.toLowerCase();
-      return sortDir === 'asc' ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1);
-    });
+  const members = useMemo(() => {
+    return state.members
+      .filter(m => {
+        const matchSearch =
+          m.name.toLowerCase().includes(search.toLowerCase()) ||
+          m.phone.includes(search);
+        const matchStatus = statusFilter === 'all' || m.status === statusFilter;
+        return matchSearch && matchStatus;
+      })
+      .map(m => ({ ...m, ...getMemberSummary(m.id, state) }))
+      .sort((a, b) => {
+        let aVal = a[sortBy] ?? '';
+        let bVal = b[sortBy] ?? '';
+        if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+        if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+        return sortDir === 'asc' ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1);
+      });
+  }, [state, search, statusFilter, sortBy, sortDir]);
+
+  const paginatedMembers = useMemo(() => {
+    const from = (page - 1) * pageSize;
+    return members.slice(from, from + pageSize);
+  }, [members, page, pageSize]);
 
   function toggleSort(col) {
     if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -249,13 +259,13 @@ export default function Members() {
             id="members-search" type="text" className="form-input pl-9"
             placeholder="Search by name or phone…"
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
         <select
           id="members-status-filter" className="form-input sm:w-40"
           value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value)}
+          onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
         >
           <option value="all">All Status</option>
           <option value="active">Active</option>
@@ -301,7 +311,7 @@ export default function Members() {
                   </td>
                 </tr>
               ) : (
-                members.map(m => (
+                paginatedMembers.map(m => (
                   <tr key={m.id} className="cursor-pointer" onClick={() => navigate(`/members/${m.id}`)}>
                     <td className="font-medium text-slate-900">
                       <div className="flex items-center gap-2">
@@ -370,6 +380,15 @@ export default function Members() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        <Pagination
+          currentPage={page}
+          totalItems={members.length}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(newSize) => { setPageSize(newSize); setPage(1); }}
+        />
       </div>
 
       {/* ── Set PIN Modal ──────────────────────────────────────────────────── */}

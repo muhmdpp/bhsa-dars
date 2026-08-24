@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, fetchAllRows } from '../lib/supabase';
 import { generateId } from '../utils/formatters';
 
 // ── Wipe old localStorage data on first load ────────────────────────────────
@@ -25,25 +25,19 @@ export function StoreProvider({ children }) {
     setState(s => ({ ...s, loading: true, error: null }));
     try {
       const [m, d, l, r, w] = await Promise.all([
-        supabase.from('members').select('*').order('name', { ascending: true }),
-        supabase.from('deposits').select('*').neq('deleted', true).order('date', { ascending: false }),
-        supabase.from('loans').select('*').neq('deleted', true).order('date', { ascending: false }),
-        supabase.from('repayments').select('*').neq('deleted', true).order('date', { ascending: false }),
-        supabase.from('withdrawals').select('*').neq('deleted', true).order('date', { ascending: false }),
+        fetchAllRows('members', q => q.order('name', { ascending: true })),
+        fetchAllRows('deposits', q => q.neq('deleted', true).order('date', { ascending: false })),
+        fetchAllRows('loans', q => q.neq('deleted', true).order('date', { ascending: false })),
+        fetchAllRows('repayments', q => q.neq('deleted', true).order('date', { ascending: false })),
+        fetchAllRows('withdrawals', q => q.neq('deleted', true).order('date', { ascending: false })),
       ]);
 
-      if (m.error) throw new Error(`Members: ${m.error.message}`);
-      if (d.error) throw new Error(`Deposits: ${d.error.message}`);
-      if (l.error) throw new Error(`Loans: ${l.error.message}`);
-      if (r.error) throw new Error(`Repayments: ${r.error.message}`);
-      if (w.error) throw new Error(`Withdrawals: ${w.error.message}`);
-
       setState({
-        members:     m.data.map(normalise),
-        deposits:    d.data.map(normalise),
-        loans:       l.data.map(normalise),
-        repayments:  r.data.map(normalise),
-        withdrawals: w.data.map(normalise),
+        members:     m.map(normalise),
+        deposits:    d.map(normalise),
+        loans:       l.map(normalise),
+        repayments:  r.map(normalise),
+        withdrawals: w.map(normalise),
         loading:     false,
         error:       null,
       });
