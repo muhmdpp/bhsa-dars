@@ -21,21 +21,33 @@ export function formatDate(dateStr) {
 }
 
 // Today's date as YYYY-MM-DD for date inputs
+// Uses the device's local date (not UTC), so entries made after midnight IST
+// don't default to the previous day.
 export function todayISO() {
-  return new Date().toISOString().split('T')[0];
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
 // Generate unique IDs
+// Timestamp counter + random suffix so two devices writing in the same
+// millisecond can't produce the same ID.
 let _counter = Date.now();
 export function generateId(prefix = 'ID') {
   _counter++;
-  return `${prefix}-${_counter}`;
+  const rand = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+  return `${prefix}-${_counter}${rand}`;
 }
 
-// Generate loan ID in LOAN-0001 format
+// Next loan ID in LOAN-0001 format: highest existing number + 1
+// (row count breaks once any loan row is hard-deleted).
 export function generateLoanId(existingLoans) {
-  const next = (existingLoans?.length || 0) + 1;
-  return `LOAN-${String(next).padStart(4, '0')}`;
+  const max = (existingLoans || []).reduce((m, l) => {
+    const n = /^LOAN-(\d+)$/.exec(l.id)?.[1];
+    return n ? Math.max(m, Number(n)) : m;
+  }, 0);
+  return `LOAN-${String(max + 1).padStart(4, '0')}`;
 }
 
 // Truncate text

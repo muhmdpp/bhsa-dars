@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
-import { getMemberSummary, getMemberLoansWithStatus } from '../utils/calculations';
+import { getMemberSummary, getMemberLoansWithStatus, compareTimeline } from '../utils/calculations';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import Badge from '../components/ui/Badge';
 
@@ -114,7 +114,8 @@ export default function MemberLedger() {
   // Build unified timeline — deposits, withdrawals, loans, repayments
   const memberDeposits    = state.deposits.filter(d => d.member_id === id);
   const memberLoans       = state.loans.filter(l => l.member_id === id);
-  const memberRepayments  = state.repayments.filter(r => r.member_id === id);
+  const memberLoanIds     = new Set(memberLoans.map(l => l.id));
+  const memberRepayments  = state.repayments.filter(r => memberLoanIds.has(r.loan_id));
   const memberWithdrawals = (state.withdrawals || []).filter(w => w.member_id === id);
 
   const timeline = [
@@ -122,7 +123,7 @@ export default function MemberLedger() {
     ...memberLoans.map(l       => ({ ...l, type: 'loan' })),
     ...memberRepayments.map(r  => ({ ...r, type: 'repayment' })),
     ...memberWithdrawals.map(w => ({ ...w, type: 'withdrawal' })),
-  ].sort((a, b) => new Date(a.date) - new Date(b.date) || (a.type === 'deposit' ? -1 : 1));
+  ].sort(compareTimeline);
 
   // Running deposit balance: deposits add, withdrawals subtract
   // (loans/repayments are tracked separately but shown in timeline)

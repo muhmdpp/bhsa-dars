@@ -76,7 +76,10 @@ export function getMemberActiveLoans(memberId, loans, repayments) {
 export function getMemberSummary(memberId, { deposits, loans, repayments, withdrawals = [] }) {
   const memberDeposits    = deposits.filter(d => d.member_id === memberId);
   const memberLoans       = loans.filter(l => l.member_id === memberId);
-  const memberRepayments  = repayments.filter(r => r.member_id === memberId);
+  // Repayments are matched through the member's loans (by loan_id), the same way the
+  // per-loan figures are, so totals agree even if a repayment's member_id is off.
+  const memberLoanIds     = new Set(memberLoans.map(l => l.id));
+  const memberRepayments  = repayments.filter(r => memberLoanIds.has(r.loan_id));
   const memberWithdrawals = withdrawals.filter(w => w.member_id === memberId);
 
   const totalDeposited  = memberDeposits.reduce((s, d) => s + d.amount, 0);
@@ -210,4 +213,16 @@ export function getDailyStats({ deposits, loans, repayments, withdrawals = [] },
   const txnCount    = d.length + l.length + r.length + w.length;
 
   return { deposited, loaned, repaid, withdrawn, net, txnCount };
+}
+
+// ── Timeline ordering ───────────────────────────────────────────────────────
+
+// Stable order for ledger timelines: by date, then deposit → loan → repayment →
+// withdrawal on the same day (so running balances never dip below zero mid-day),
+// then by id.
+const TYPE_ORDER = { deposit: 0, loan: 1, repayment: 2, withdrawal: 3 };
+export function compareTimeline(a, b) {
+  return (new Date(a.date) - new Date(b.date))
+    || ((TYPE_ORDER[a.type] ?? 9) - (TYPE_ORDER[b.type] ?? 9))
+    || String(a.id).localeCompare(String(b.id));
 }

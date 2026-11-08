@@ -20,7 +20,8 @@ function EditModal({ txn, type, members, onClose, onSave }) {
     setSaving(true);
     setError('');
     try {
-      const updates = { amount: Number(amount), date, member_id: memberId };
+      const updates = { amount: Number(amount), date };
+      if (type !== 'repayment') updates.member_id = memberId;
       if (type === 'loan')   updates.reason = note;
       else                   updates.note   = note;
       await onSave(txn.id, updates, reason.trim());
@@ -48,12 +49,16 @@ function EditModal({ txn, type, members, onClose, onSave }) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Member */}
+          {/* Member (a repayment always belongs to its loan's borrower) */}
           <div>
             <label className="form-label">Member</label>
+            {type === 'repayment' && (
+              <p className="text-xs text-slate-400 mb-1">Set by loan {txn.loan_id} — edit the loan to change it.</p>
+            )}
             <select
               className="form-input"
               value={memberId}
+              disabled={type === 'repayment'}
               onChange={e => setMemberId(e.target.value)}
             >
               {members.map(m => (
@@ -150,7 +155,7 @@ function DeleteModal({ txn, type, onClose, onConfirm }) {
 
         <div className="p-6 space-y-4">
           <p className="text-sm text-slate-600">
-            This will <strong>permanently remove</strong> this transaction from all records and update the pool balance accordingly.
+            This will <strong>remove</strong> this transaction from all totals and update the pool balance accordingly. The record itself is kept in the database (marked as deleted) for audit.
           </p>
 
           <div>
@@ -189,8 +194,9 @@ function TxnRow({ txn, type, memberMap, onEdit, onDelete }) {
 
   const typeColor = type === 'deposit' ? 'text-credit-600'
     : type === 'loan' ? 'text-loan-600'
+    : type === 'withdrawal' ? 'text-amber-600'
     : 'text-repay-600';
-  const sign = type === 'loan' ? '−' : '+';
+  const sign = type === 'loan' || type === 'withdrawal' ? '−' : '+';
 
   return (
     <tr className="hover:bg-slate-50 transition-colors">
@@ -273,10 +279,11 @@ export default function Transactions() {
     });
   }, [state, activeTab, search, memberMap]);
 
-  const totals = useMemo(() => {
-    const raw = state[activeTab] || [];
-    return raw.reduce((s, t) => s + t.amount, 0);
-  }, [state, activeTab]);
+  // Total of the rows currently shown (respects the search filter)
+  const totals = useMemo(
+    () => currentData.reduce((s, t) => s + t.amount, 0),
+    [currentData]
+  );
 
   const paginatedData = useMemo(() => {
     const from = (page - 1) * pageSize;
