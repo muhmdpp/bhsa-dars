@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
 import { getPoolBalance } from '../utils/calculations';
-import { formatCurrency, todayISO } from '../utils/formatters';
+import { formatCurrency, todayISO, generateLoanId } from '../utils/formatters';
 import SearchableSelect from '../components/ui/SearchableSelect';
 
 export default function LoanEntry() {
@@ -19,15 +19,15 @@ export default function LoanEntry() {
     .filter(m => m.status === 'active')
     .map(m => ({ value: m.id, label: m.name, sub: m.phone }));
 
-  // Preview next loan ID from current state
-  const nextLoanNum = state.loans.length + 1;
-  const nextLoanId = `LOAN-${String(nextLoanNum).padStart(4, '0')}`;
+  // Preview of the next loan ID (the final ID is allocated when saving)
+  const nextLoanId = generateLoanId(state.loans);
 
   async function handleSubmit(e) {
     e.preventDefault();
     if (!form.member_id) { setError('Please select a member'); return; }
     if (!form.amount || amount <= 0) { setError('Enter a valid amount'); return; }
     if (!form.reason.trim()) { setError('Reason is required'); return; }
+    if (exceedsBalance) { setError(`Loan exceeds the available pool balance of ${formatCurrency(poolBalance)}`); return; }
 
     setSaving(true);
     setError('');
@@ -102,7 +102,7 @@ export default function LoanEntry() {
             <p className="font-semibold">Insufficient pool balance</p>
             <p className="text-sm mt-0.5">
               Loan of {formatCurrency(amount)} exceeds pool balance of {formatCurrency(poolBalance)}.
-              You can still proceed — pool will go negative.
+              Reduce the amount to issue this loan.
             </p>
           </div>
         </div>
@@ -137,7 +137,7 @@ export default function LoanEntry() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
             </svg>
-            <span className="text-xs text-slate-500">Loan ID will be assigned:</span>
+            <span className="text-xs text-slate-500">Expected loan ID:</span>
             <span className="text-sm font-mono font-bold text-slate-800">{nextLoanId}</span>
           </div>
 
@@ -202,7 +202,7 @@ export default function LoanEntry() {
           <div className="flex gap-3 pt-1">
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || exceedsBalance}
               className={exceedsBalance
                 ? 'btn bg-amber-600 text-white hover:bg-amber-700 focus:ring-amber-500 disabled:opacity-50'
                 : 'btn-loan disabled:opacity-50'}
@@ -217,7 +217,7 @@ export default function LoanEntry() {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  {exceedsBalance ? 'Issue Anyway' : 'Issue Loan'}
+                  Issue Loan
                 </>
               )}
             </button>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase, fetchAllRows } from '../lib/supabase';
+import { fetchAllRows, notDeleted } from '../lib/supabase';
+import { compareTimeline } from '../utils/calculations';
 import { formatCurrency, formatDate } from '../utils/formatters';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -80,12 +81,16 @@ export default function MemberPortal() {
     async function load() {
       setLoading(true);
       try {
-        const [d, w, l, r] = await Promise.all([
-          fetchAllRows('deposits', q => q.eq('member_id', memberId).neq('deleted', true).order('date', { ascending: true })),
-          fetchAllRows('withdrawals', q => q.eq('member_id', memberId).neq('deleted', true).order('date', { ascending: true })),
-          fetchAllRows('loans', q => q.eq('member_id', memberId).neq('deleted', true).order('date', { ascending: true })),
-          fetchAllRows('repayments', q => q.eq('member_id', memberId).neq('deleted', true).order('date', { ascending: true })),
+        const [d, w, l] = await Promise.all([
+          fetchAllRows('deposits', q => notDeleted(q.eq('member_id', memberId)).order('date', { ascending: true })),
+          fetchAllRows('withdrawals', q => notDeleted(q.eq('member_id', memberId)).order('date', { ascending: true })),
+          fetchAllRows('loans', q => notDeleted(q.eq('member_id', memberId)).order('date', { ascending: true })),
         ]);
+        // Repayments are taken from the member's live loans (by loan_id), matching the admin view
+        const loanIds = l.map(x => x.id);
+        const r = loanIds.length
+          ? await fetchAllRows('repayments', q => notDeleted(q.in('loan_id', loanIds)).order('date', { ascending: true }))
+          : [];
 
         const normalise = r => ({ ...r, amount: Number(r.amount) });
         setData({
@@ -121,7 +126,7 @@ export default function MemberPortal() {
       ...data.withdrawals.map(w => ({ ...w, type: 'withdrawal' })),
       ...data.loans.map(l       => ({ ...l, type: 'loan' })),
       ...data.repayments.map(r  => ({ ...r, type: 'repayment' })),
-    ].sort((a, b) => new Date(a.date) - new Date(b.date) || (a.type === 'deposit' ? -1 : 1));
+    ].sort(compareTimeline);
 
     let running = 0;
     return all.map(item => {
