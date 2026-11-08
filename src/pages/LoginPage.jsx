@@ -2,6 +2,136 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
+// ── Searchable member name picker ──────────────────────────────────────────
+// Type part of your name (any order, e.g. "ameen kott") to narrow the list.
+
+function MemberPicker({ members, value, loading, onChange }) {
+  const [query, setQuery]   = useState('');
+  const [open, setOpen]     = useState(false);
+  const [active, setActive] = useState(0);
+  const wrapRef = useRef(null);
+  const listRef = useRef(null);
+
+  const selected = members.find(m => m.id === value);
+  const words    = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const filtered = words.length
+    ? members.filter(m => words.every(w => m.name.toLowerCase().includes(w)))
+    : members;
+
+  // Close when tapping outside
+  useEffect(() => {
+    function onDown(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('touchstart', onDown);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('touchstart', onDown);
+    };
+  }, []);
+
+  // Keep the highlighted row visible while using arrow keys
+  useEffect(() => {
+    listRef.current?.children[active]?.scrollIntoView({ block: 'nearest' });
+  }, [active]);
+
+  function pick(m) {
+    onChange(m.id);
+    setQuery('');
+    setOpen(false);
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setOpen(true);
+      setActive(a => Math.min(a + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActive(a => Math.max(a - 1, 0));
+    } else if (e.key === 'Enter' && open) {
+      e.preventDefault();
+      if (filtered[active]) pick(filtered[active]);
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+    }
+  }
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+        <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+      </div>
+      <input
+        id="member-select"
+        type="text"
+        autoComplete="off"
+        disabled={loading}
+        value={open ? query : (selected?.name ?? '')}
+        placeholder={loading ? 'Loading members…' : 'Search your name…'}
+        onFocus={() => { setOpen(true); setQuery(''); setActive(0); }}
+        onChange={e => { setQuery(e.target.value); setOpen(true); setActive(0); if (value) onChange(''); }}
+        onKeyDown={handleKeyDown}
+        role="combobox"
+        aria-expanded={open}
+        aria-controls="member-options"
+        className="w-full pl-9 pr-9 py-3 bg-white/10 border border-white/15 rounded-xl text-sm text-white
+          placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-transparent
+          transition-all disabled:opacity-50"
+      />
+      {(selected || query) && !loading ? (
+        <button
+          type="button"
+          aria-label="Clear name"
+          onClick={() => { onChange(''); setQuery(''); setOpen(true); wrapRef.current?.querySelector('input')?.focus(); }}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      ) : (
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+          <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      )}
+
+      {open && !loading && (
+        <ul
+          id="member-options"
+          ref={listRef}
+          role="listbox"
+          className="absolute z-50 mt-2 w-full max-h-64 overflow-y-auto rounded-xl border border-white/15
+            bg-slate-800 shadow-2xl py-1"
+        >
+          {filtered.length === 0 ? (
+            <li className="px-4 py-3 text-sm text-slate-400 text-center">No member found</li>
+          ) : filtered.map((m, i) => (
+            <li
+              key={m.id}
+              role="option"
+              aria-selected={m.id === value}
+              onMouseDown={e => { e.preventDefault(); pick(m); }}
+              onMouseEnter={() => setActive(i)}
+              className={`px-4 py-2.5 text-sm cursor-pointer ${
+                i === active ? 'bg-white/10 text-white' : 'text-slate-200'
+              } ${m.id === value ? 'font-semibold' : ''}`}
+            >
+              {m.name}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 // ── Member Login Tab ───────────────────────────────────────────────────────
 
 function MemberLoginTab() {
@@ -69,38 +199,16 @@ function MemberLoginTab() {
         <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
           Your Name
         </label>
-        <div className="relative">
-          <div className="absolute left-3 top-1/2 -translate-y-1/2">
-            <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-          </div>
-          <select
-            id="member-select"
-            value={memberId}
-            onChange={e => { setMemberId(e.target.value); setError(''); }}
-            disabled={fetching}
-            className="w-full pl-9 pr-4 py-3 bg-white/10 border border-white/15 rounded-xl text-sm
-              focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-transparent transition-all
-              disabled:opacity-50 appearance-none"
-            style={{ color: memberId ? '#ffffff' : '#64748b', caretColor: '#ffffff' }}
-          >
-            <option value="" style={{ color: '#1e293b' }}>
-              {fetching ? 'Loading members…' : 'Select your name…'}
-            </option>
-            {members.map(m => (
-              <option key={m.id} value={m.id} style={{ color: '#1e293b' }}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-            <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </div>
-        </div>
+        <MemberPicker
+          members={members}
+          value={memberId}
+          loading={fetching}
+          onChange={id => {
+            setMemberId(id);
+            setError('');
+            if (id) setTimeout(() => pinRefs[0].current?.focus(), 0);
+          }}
+        />
       </div>
 
       {/* 4-digit PIN boxes */}
