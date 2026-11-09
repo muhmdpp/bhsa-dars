@@ -3,10 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Admin sign-in lasts for the browser tab only (like the old sessionStorage login)
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: { storage: window.sessionStorage, persistSession: true, autoRefreshToken: true },
-});
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // True when a database function hasn't been installed yet (migration not run)
 export function isMissingFunction(error) {

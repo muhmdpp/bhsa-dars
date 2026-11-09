@@ -1,22 +1,24 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback } from 'react';
 import { supabase, isMissingFunction } from '../lib/supabase';
 
-// Admin sign-in uses Supabase Auth, so no password is shipped inside the app.
+// Admin sign-in: email/password from the app's environment (as before).
 // PIN checks happen in the database (20261109_security_and_audit.sql). Until that
 // migration has been run, the PIN checks fall back to the old client-side way.
 
+const ADMIN_EMAIL    = import.meta.env.VITE_ADMIN_EMAIL    || '';
+const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || '';
+
+const LOGIN_STORAGE      = 'bhsa_logged_in';
 const MEMBER_SESSION_KEY = 'bhsa_member_session';
 
-// Remove legacy keys from older versions
+// Remove any legacy localStorage PIN so old devices don't diverge
 localStorage.removeItem('bhsa_pin');
-sessionStorage.removeItem('bhsa_logged_in');
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [session, setSession]     = useState(null);
+  const [loggedIn, setLoggedIn]   = useState(() => sessionStorage.getItem(LOGIN_STORAGE) === 'true');
   const [pinLocked, setPinLocked] = useState(true); // always starts locked each session
-  const [pinReady, setPinReady]   = useState(false); // auth state restored
 
   // ── Member session ───────────────────────────────────────────────────────
   const [memberSession, setMemberSession] = useState(() => {
@@ -26,38 +28,22 @@ export function AuthProvider({ children }) {
     } catch { return null; }
   });
 
-  // ── Restore + follow the Supabase admin session ─────────────────────────
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session ?? null);
-      setPinReady(true);
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s ?? null);
-      if (!s) setPinLocked(true);
-    });
-    return () => sub.subscription.unsubscribe();
-  }, []);
-
   // ── Admin sign-in ───────────────────────────────────────────────────────
   // Returns null on success, or an error message.
   const login = useCallback(async (email, password) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-    if (error) {
-      return error.message === 'Invalid login credentials'
-        ? 'Invalid email or password. Please try again.'
-        : error.message;
+    if (email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASSWORD) {
+      sessionStorage.setItem(LOGIN_STORAGE, 'true');
+      setLoggedIn(true);
+      setPinLocked(true); // still needs PIN after login
+      return null;
     }
-    setPinLocked(true); // still needs PIN after login
-    return null;
+    return 'Invalid email or password. Please try again.';
   }, []);
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(() => {
+    sessionStorage.removeItem(LOGIN_STORAGE);
+    setLoggedIn(false);
     setPinLocked(true);
-    await supabase.auth.signOut();
   }, []);
 
   // ── Admin PIN lock ───────────────────────────────────────────────────────
@@ -139,10 +125,9 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      loggedIn: !!session,
-      adminEmail: session?.user?.email ?? null,
+      loggedIn,
       pinLocked,
-      pinReady,
+      pinReady: true,
       login,
       logout,
       unlockWithPin,

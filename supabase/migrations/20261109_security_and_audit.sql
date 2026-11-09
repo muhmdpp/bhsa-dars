@@ -1,20 +1,18 @@
 -- ============================================================================
--- DHSA security + audit migration  (2026-11-09)
+-- DHSA PIN-security + audit migration  (2026-11-09)
 --
--- Run AFTER 20261108_data_integrity.sql, and only once the new app version is
--- deployed and your admin user exists in Supabase Auth (see SECURITY_SETUP.md).
+-- Run AFTER 20261108_data_integrity.sql.
 --
 -- SAFE FOR EXISTING DATA: no existing row is updated or deleted. This script
--- only adds tables, functions and permissions.
+-- only adds tables, functions and permissions. Admin access is unchanged
+-- (the app keeps using its existing login and key).
 --
 -- What it does
---   • Only signed-in admins (listed in dhsa_admins) can read or change data.
---     The public app key can no longer read PINs or touch any record.
 --   • Members log in through a server-side PIN check that returns a session
---     token; they can only ever see their own records.
+--     token; the member portal only returns that member's records.
 --   • 5 wrong PINs in a row lock that member (or the admin PIN) for 15 minutes.
 --   • Every insert/edit/delete on money tables is copied to dhsa_audit_log,
---     which nobody can edit or delete through the app.
+--     which cannot be edited or deleted through the app's key.
 --   • Withdrawals and other changes may not push the pool below zero.
 --   • A member can only be permanently deleted once their balance is zero and
 --     they have no unpaid loan.
@@ -26,39 +24,6 @@ begin;
 
 -- ── 0. Supabase helpers we rely on ──────────────────────────────────────────
 -- auth.jwt() is provided by Supabase. gen_random_uuid() is built into Postgres.
-
--- ── 1. Admin allow-list ─────────────────────────────────────────────────────
-create table if not exists dhsa_admins (
-  email    text primary key,
-  added_at timestamptz not null default now()
-);
--- ▼▼ The admin login email(s). Add more lines for more admins. ▼▼
-insert into dhsa_admins (email) values ('financewing982@gmail.com') on conflict do nothing;
-
-create or replace function dhsa_is_admin() returns boolean
-language sql stable security definer set search_path = public as $$
-  select exists (
-    select 1 from dhsa_admins
-    where lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
-  )
-$$;
-
-create or replace function dhsa_require_admin() returns void
-language plpgsql stable as $$
-begin
-  if not dhsa_is_admin() then
-    raise exception 'Not authorised. Please sign in as an admin.';
-  end if;
-end $$;
-
--- Every money function from the first migration starts with dhsa_lock(), so
--- adding the admin check here protects all of them.
-create or replace function dhsa_lock() returns void
-language plpgsql as $$
-begin
-  perform dhsa_require_admin();
-  perform pg_advisory_xact_lock(hashtext('dhsa_money'));
-end $$;
 
 -- ── 2. Audit log (append-only) ──────────────────────────────────────────────
 create table if not exists dhsa_audit_log (
@@ -198,8 +163,7 @@ create or replace function dhsa_verify_admin_pin(p_pin text) returns json
 language plpgsql security definer set search_path = public as $$
 declare v_key text; v_msg text; v_pin text;
 begin
-  if not dhsa_is_admin() then return json_build_object('error', 'Not authorised.'); end if;
-  v_key := 'admin:' || lower(auth.jwt() ->> 'email');
+  v_key := 'admin';
   v_msg := dhsa_lockout_message(v_key);
   if v_msg is not null then return json_build_object('error', v_msg); end if;
 
@@ -363,53 +327,46 @@ begin
   delete from members     where id = p_id;
 end $$;
 
--- ── 7. Lock the tables down ─────────────────────────────────────────────────
+-- ── 7. Permissions ──────────────────────────────────────────────────────────
+-- Data tables are left exactly as they are. The internal tables get no direct
+-- access, so the audit log can't be altered and PIN attempts/sessions can't be
+-- read or reset through the app's key.
 do $$
 declare t text; p record;
 begin
-  -- Data tables: admins only
-  foreach t in array array['members','deposits','loans','repayments','withdrawals','settings'] loop
+  foreach t in array array['dhsa_audit_log','dhsa_login_attempts','dhsa_member_sessions'] loop
     execute format('alter table %I enable row level security', t);
     for p in select policyname from pg_policies where schemaname = 'public' and tablename = t loop
       execute format('drop policy %I on %I', p.policyname, t);
     end loop;
-    execute format('revoke all on %I from anon', t);
-    execute format('grant select, insert, update, delete on %I to authenticated', t);
-    execute format('create policy dhsa_admin_all on %I for all to authenticated
-                    using (dhsa_is_admin()) with check (dhsa_is_admin())', t);
+    execute format('revoke all on %I from public', t);
+    if exists (select 1 from pg_roles where rolname = 'anon') then
+      execute format('revoke all on %I from anon', t);
+    end if;
+    if exists (select 1 from pg_roles where rolname = 'authenticated') then
+      execute format('revoke all on %I from authenticated', t);
+    end if;
   end loop;
-
-  -- Internal tables: no direct access at all except reading the audit log
-  foreach t in array array['dhsa_admins','dhsa_audit_log','dhsa_login_attempts','dhsa_member_sessions'] loop
-    execute format('alter table %I enable row level security', t);
-    for p in select policyname from pg_policies where schemaname = 'public' and tablename = t loop
-      execute format('drop policy %I on %I', p.policyname, t);
-    end loop;
-    execute format('revoke all on %I from anon, authenticated', t);
-  end loop;
-  grant select on dhsa_audit_log to authenticated;
-  create policy dhsa_admin_read on dhsa_audit_log for select to authenticated using (dhsa_is_admin());
 end $$;
 
--- Sequence: admins (authenticated) only
-revoke all on sequence dhsa_loan_number_seq from anon;
-grant usage, select on sequence dhsa_loan_number_seq to authenticated;
-
--- Functions: nothing for the public key except the four member-portal calls
+-- The app may call the dhsa_ functions, except the internal PIN/audit helpers
 do $$
-declare r record;
+declare r record; v_internal text[] := array['dhsa_audit','dhsa_record_failure','dhsa_lockout_message'];
 begin
-  for r in select p.oid::regprocedure as sig from pg_proc p
+  for r in select p.oid::regprocedure as sig, p.proname from pg_proc p
            join pg_namespace n on n.oid = p.pronamespace
            where n.nspname = 'public' and p.proname like 'dhsa\_%' loop
-    execute format('revoke all on function %s from public, anon', r.sig);
-    execute format('grant execute on function %s to authenticated', r.sig);
+    execute format('revoke all on function %s from public', r.sig);
+    if exists (select 1 from pg_roles where rolname = 'anon') then
+      execute format(case when r.proname = any (v_internal) then 'revoke all on function %s from anon'
+                          else 'grant execute on function %s to anon' end, r.sig);
+    end if;
+    if exists (select 1 from pg_roles where rolname = 'authenticated') then
+      execute format(case when r.proname = any (v_internal) then 'revoke all on function %s from authenticated'
+                          else 'grant execute on function %s to authenticated' end, r.sig);
+    end if;
   end loop;
 end $$;
-grant execute on function dhsa_member_names()               to anon;
-grant execute on function dhsa_member_login(text, text)     to anon;
-grant execute on function dhsa_member_portal(uuid)          to anon;
-grant execute on function dhsa_member_logout(uuid)          to anon;
 
 commit;
 
