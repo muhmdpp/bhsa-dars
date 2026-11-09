@@ -117,7 +117,7 @@ function EditModal({ txn, type, members, onClose, onSave }) {
 }
 
 // ── Delete Modal ─────────────────────────────────────────────────────────────
-function DeleteModal({ txn, type, onClose, onConfirm }) {
+function DeleteModal({ txn, type, linkedRepayments = [], onClose, onConfirm }) {
   const [reason, setReason]  = useState('');
   const [saving, setSaving]  = useState(false);
   const [error, setError]    = useState('');
@@ -157,6 +157,20 @@ function DeleteModal({ txn, type, onClose, onConfirm }) {
           <p className="text-sm text-slate-600">
             This will <strong>remove</strong> this transaction from all totals and update the pool balance accordingly. The record itself is kept in the database (marked as deleted) for audit.
           </p>
+
+          {type === 'loan' && linkedRepayments.length > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <p className="font-semibold">
+                Its {linkedRepayments.length} repayment{linkedRepayments.length > 1 ? 's' : ''} (
+                {formatCurrency(linkedRepayments.reduce((s, r) => s + r.amount, 0))}) will be deleted too:
+              </p>
+              <ul className="mt-1.5 space-y-0.5 text-xs">
+                {linkedRepayments.map(r => (
+                  <li key={r.id}>{r.id} · {formatCurrency(r.amount)} · {formatDate(r.date)}</li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div>
             <label className="form-label">Reason for Deletion *</label>
@@ -419,6 +433,9 @@ export default function Transactions() {
         <DeleteModal
           txn={deleteTarget}
           type={activeTab.slice(0, -1)}
+          linkedRepayments={activeTab === 'loans'
+            ? state.repayments.filter(r => r.loan_id === deleteTarget.id)
+            : []}
           onClose={() => setDeleteTarget(null)}
           onConfirm={handleDeleteConfirm}
         />

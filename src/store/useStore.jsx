@@ -21,13 +21,14 @@ function check(error) {
 // When the migration has been run, money operations go through these functions:
 // each one checks and saves inside a single locked transaction. Until then the
 // app falls back to the checks below, so it keeps working either way.
-let rpcAvailable = true;
+// Remembered per function, so one missing function doesn't switch off the others
+const missingFns = new Set();
 async function tryRpc(fn, args) {
-  if (!rpcAvailable) return { used: false };
+  if (missingFns.has(fn)) return { used: false };
   const { data, error } = await supabase.rpc(fn, args);
   if (!error) return { used: true, data };
   if (isMissingFunction(error)) { // function not installed
-    rpcAvailable = false;
+    missingFns.add(fn);
     return { used: false };
   }
   throw new Error(error.message);
@@ -347,20 +348,20 @@ export function StoreProvider({ children }) {
     },
 
     deleteLoan: async (id, reason) => {
-      if ((await tryRpc('dhsa_delete_loan', { p_id: id, p_reason: reason })).used) { await loadAll(); return; }
-      const repaid = await fetchLoanRepaid(id);
-      if (repaid > 0) {
-        throw new Error(
-          `This loan has ${inr(repaid)} in repayments. Delete those repayments first, ` +
-          `otherwise they would still be counted in the pool balance.`
-        );
-      }
+      // Deleting a loan also deletes its repayments (all soft-deleted, so restorable)
+      if ((await tryRpc('dhsa_delete_loan_cascade', { p_id: id, p_reason: reason })).used) { await loadAll(); return; }
+
+      // Fallback before the SQL is installed. Loan first: if the second step failed,
+      // repayments of a deleted loan are already left out of every total.
+      const now = new Date().toISOString();
       const { error } = await supabase.from('loans').update({
-        deleted:     true,
-        edit_reason: reason,
-        edited_at:   new Date().toISOString(),
+        deleted: true, edit_reason: reason, edited_at: now,
       }).eq('id', id);
       check(error);
+      const { error: rErr } = await notDeleted(supabase.from('repayments').update({
+        deleted: true, edit_reason: `Loan ${id} deleted: ${reason}`, edited_at: now,
+      }).eq('loan_id', id));
+      check(rErr);
       await loadAll();
     },
 
