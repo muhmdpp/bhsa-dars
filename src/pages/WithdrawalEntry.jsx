@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useStore } from '../store/useStore';
-import { getMemberDepositBalance } from '../utils/calculations';
+import { getMemberDepositBalance, getPoolBalance } from '../utils/calculations';
 import { formatCurrency, todayISO } from '../utils/formatters';
 import SearchableSelect from '../components/ui/SearchableSelect';
 
@@ -24,6 +24,10 @@ export default function WithdrawalEntry() {
   const enteredAmount  = Number(form.amount || 0);
   const balanceAfter   = memberBalance !== null ? memberBalance - enteredAmount : null;
   const exceedsBalance = memberBalance !== null && enteredAmount > memberBalance;
+  // The pool must also have the cash (some of it may be out on loan)
+  const poolBalance    = getPoolBalance(state);
+  const maxAllowed     = memberBalance !== null ? Math.max(0, Math.min(memberBalance, poolBalance)) : null;
+  const exceedsPool    = enteredAmount > poolBalance;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -31,6 +35,10 @@ export default function WithdrawalEntry() {
     if (!form.amount || enteredAmount <= 0) { setError('Enter a valid amount'); return; }
     if (exceedsBalance) {
       setError(`Insufficient balance. ${form.member_id ? `This member has only ${formatCurrency(memberBalance)} available.` : ''}`);
+      return;
+    }
+    if (exceedsPool) {
+      setError(`Not enough cash in the pool: only ${formatCurrency(Math.max(0, poolBalance))} is available right now (the rest is out on loan).`);
       return;
     }
 
@@ -140,7 +148,7 @@ export default function WithdrawalEntry() {
               <label className="form-label" htmlFor="withdrawal-amount">
                 Amount (₹) *
                 {memberBalance !== null && (
-                  <span className="ml-1 font-normal text-slate-400">max {formatCurrency(memberBalance)}</span>
+                  <span className="ml-1 font-normal text-slate-400">max {formatCurrency(maxAllowed)}</span>
                 )}
               </label>
               <div className="relative">
@@ -148,7 +156,7 @@ export default function WithdrawalEntry() {
                 <input
                   id="withdrawal-amount"
                   type="number" min="1" step="1"
-                  max={memberBalance ?? undefined}
+                  max={maxAllowed ?? undefined}
                   className={`form-input pl-7 ${exceedsBalance ? 'border-red-400 focus:ring-red-300' : ''}`}
                   placeholder="0"
                   value={form.amount}

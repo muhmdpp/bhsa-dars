@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
 import { getPoolBalance } from '../utils/calculations';
-import { formatCurrency, formatDate, todayISO } from '../utils/formatters';
+import { formatCurrency, todayISO } from '../utils/formatters';
 import SearchableSelect from '../components/ui/SearchableSelect';
 
 export default function DepositEntry() {

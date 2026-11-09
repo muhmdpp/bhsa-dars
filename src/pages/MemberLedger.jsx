@@ -8,7 +8,6 @@ import Badge from '../components/ui/Badge';
 function TimelineEntry({ item }) {
   const isDeposit    = item.type === 'deposit';
   const isLoan       = item.type === 'loan';
-  const isRepayment  = item.type === 'repayment';
   const isWithdrawal = item.type === 'withdrawal';
 
   const dotColor    = isDeposit    ? 'bg-credit-500'
@@ -127,12 +126,12 @@ export default function MemberLedger() {
 
   // Running deposit balance: deposits add, withdrawals subtract
   // (loans/repayments are tracked separately but shown in timeline)
-  let runningDepositBalance = 0;
-  const timelineWithBalance = timeline.map(item => {
-    if      (item.type === 'deposit')    runningDepositBalance += item.amount;
-    else if (item.type === 'withdrawal') runningDepositBalance -= item.amount;
-    return { ...item, runningBalance: runningDepositBalance };
-  });
+  const timelineWithBalance = [];
+  for (const item of timeline) {
+    const prev  = timelineWithBalance.length ? timelineWithBalance[timelineWithBalance.length - 1].runningBalance : 0;
+    const delta = item.type === 'deposit' ? item.amount : item.type === 'withdrawal' ? -item.amount : 0;
+    timelineWithBalance.push({ ...item, runningBalance: prev + delta });
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">

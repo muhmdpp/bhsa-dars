@@ -2,33 +2,34 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function PinLockScreen() {
-  const { unlockWithPin, lockScreen, logout } = useAuth();
+  const { unlockWithPin, logout } = useAuth();
   const [pin, setPin]       = useState('');
   const [shake, setShake]   = useState(false);
   const [error, setError]   = useState('');
-  const [attempts, setAttempts] = useState(0);
+  const [checking, setChecking] = useState(false);
 
   const handleDigit = useCallback((digit) => {
-    if (pin.length >= 4) return;
+    if (pin.length >= 4 || checking) return;
     const next = pin + digit;
     setPin(next);
     setError('');
 
     if (next.length === 4) {
-      setTimeout(() => {
-        const ok = unlockWithPin(next);
-        if (!ok) {
+      setChecking(true);
+      // Checked on the server (wrong PINs are counted; 5 in a row lock it for 15 min)
+      unlockWithPin(next).then(err => {
+        setChecking(false);
+        if (err) {
           setShake(true);
-          setError('Incorrect PIN');
-          setAttempts(a => a + 1);
+          setError(err);
           setTimeout(() => {
             setPin('');
             setShake(false);
           }, 600);
         }
-      }, 100);
+      });
     }
-  }, [pin, unlockWithPin]);
+  }, [pin, checking, unlockWithPin]);
 
   const handleBackspace = useCallback(() => {
     setPin(p => p.slice(0, -1));
@@ -80,7 +81,7 @@ export default function PinLockScreen() {
 
         {/* Error */}
         <div className="h-5 mb-4">
-          {error && <p className="text-sm text-red-400 text-center">{error}{attempts >= 3 ? ' · Too many attempts?' : ''}</p>}
+          {error && <p className="text-sm text-red-400 text-center">{error}</p>}
         </div>
 
         {/* Numpad */}

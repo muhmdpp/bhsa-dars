@@ -6,7 +6,6 @@ import {
 import { useStore } from '../store/useStore';
 import {
   getMemberSummary, getOutstandingLoans, getPoolBalanceTrend,
-  getPoolBalance, getTotalDeposited,
 } from '../utils/calculations';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import Badge from '../components/ui/Badge';
@@ -26,8 +25,6 @@ export default function Reports() {
   const [memberSort, setMemberSort] = useState('name');
   const [memberSortDir, setMemberSortDir] = useState('asc');
 
-  const poolBalance    = getPoolBalance(state);
-  const totalDeposited = getTotalDeposited(state.deposits);
   const trend          = getPoolBalanceTrend(state);
   const outstanding    = getOutstandingLoans(state);
 
@@ -47,7 +44,7 @@ export default function Reports() {
     else { setMemberSort(col); setMemberSortDir('asc'); }
   }
 
-  function SortIcon({ col }) {
+  function sortIcon(col) {
     if (memberSort !== col) return <span className="text-slate-300 ml-1">↕</span>;
     return <span className="ml-1">{memberSortDir === 'asc' ? '↑' : '↓'}</span>;
   }
@@ -124,20 +121,20 @@ export default function Reports() {
             <thead>
               <tr>
                 <th onClick={() => toggleSort('name')} className="cursor-pointer select-none">
-                  Member <SortIcon col="name" />
+                  Member {sortIcon('name')}
                 </th>
                 <th>Status</th>
                 <th onClick={() => toggleSort('totalDeposited')} className="cursor-pointer select-none">
-                  Deposited <SortIcon col="totalDeposited" />
+                  Deposited {sortIcon('totalDeposited')}
                 </th>
                 <th onClick={() => toggleSort('totalBorrowed')} className="cursor-pointer select-none">
-                  Borrowed <SortIcon col="totalBorrowed" />
+                  Borrowed {sortIcon('totalBorrowed')}
                 </th>
                 <th onClick={() => toggleSort('totalRepaid')} className="cursor-pointer select-none">
-                  Repaid <SortIcon col="totalRepaid" />
+                  Repaid {sortIcon('totalRepaid')}
                 </th>
                 <th onClick={() => toggleSort('outstanding')} className="cursor-pointer select-none">
-                  Outstanding <SortIcon col="outstanding" />
+                  Outstanding {sortIcon('outstanding')}
                 </th>
                 <th>Active Loans</th>
               </tr>

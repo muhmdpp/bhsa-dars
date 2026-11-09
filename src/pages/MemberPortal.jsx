@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchAllRows, notDeleted } from '../lib/supabase';
+import { supabase, fetchAllRows, notDeleted, isMissingFunction } from '../lib/supabase';
 import { compareTimeline } from '../utils/calculations';
 import { formatCurrency, formatDate } from '../utils/formatters';
 
@@ -71,7 +71,7 @@ function SummaryCard({ label, value, colorClass, bgClass, borderClass }) {
 
 export default function MemberPortal() {
   const { memberSession, memberLogout } = useAuth();
-  const { memberId, memberName } = memberSession || {};
+  const { memberId, memberName, token } = memberSession || {};
 
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
@@ -80,7 +80,34 @@ export default function MemberPortal() {
   useEffect(() => {
     async function load() {
       setLoading(true);
+      const normalise = r => ({ ...r, amount: Number(r.amount) });
       try {
+        // Secure path: the server returns only this member's records for a valid session
+        const { data: p, error: pErr } = await supabase.rpc(
+          token ? 'dhsa_member_portal' : 'dhsa_member_names',
+          token ? { p_token: token } : undefined,
+        );
+        if (token && !pErr) {
+          setData({
+            deposits:    p.deposits.map(normalise),
+            withdrawals: p.withdrawals.map(normalise),
+            loans:       p.loans.map(normalise),
+            repayments:  p.repayments.map(normalise),
+          });
+          return;
+        }
+        if (pErr && !isMissingFunction(pErr)) {
+          // Expired/invalid session → back to the login screen
+          memberLogout();
+          return;
+        }
+        if (!token && !pErr) {
+          // Logged in the old way but the secure functions now exist: log in again
+          memberLogout();
+          return;
+        }
+
+        // Fallback before the security migration is installed
         const [d, w, l] = await Promise.all([
           fetchAllRows('deposits', q => notDeleted(q.eq('member_id', memberId)).order('date', { ascending: true })),
           fetchAllRows('withdrawals', q => notDeleted(q.eq('member_id', memberId)).order('date', { ascending: true })),
@@ -92,7 +119,6 @@ export default function MemberPortal() {
           ? await fetchAllRows('repayments', q => notDeleted(q.in('loan_id', loanIds)).order('date', { ascending: true }))
           : [];
 
-        const normalise = r => ({ ...r, amount: Number(r.amount) });
         setData({
           deposits:    d.map(normalise),
           withdrawals: w.map(normalise),
@@ -106,7 +132,7 @@ export default function MemberPortal() {
       }
     }
     load();
-  }, [memberId]);
+  }, [memberId, token, memberLogout]);
 
   // ── Derived ──────────────────────────────────────────────────────────────
 

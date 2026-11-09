@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { supabase, isMissingFunction } from '../lib/supabase';
 
 // ── Searchable member name picker ──────────────────────────────────────────
 // Type part of your name (any order, e.g. "ameen kott") to narrow the list.
@@ -146,15 +146,17 @@ function MemberLoginTab() {
   const pinRefs = [useRef(), useRef(), useRef(), useRef()];
 
   useEffect(() => {
-    supabase
-      .from('members')
-      .select('id, name')
-      .eq('status', 'active')
-      .order('name', { ascending: true })
-      .then(({ data }) => {
-        setMembers(data || []);
-        setFetching(false);
-      });
+    (async () => {
+      // Names only, via a database function (members table is admin-only)
+      let { data, error } = await supabase.rpc('dhsa_member_names');
+      if (error && isMissingFunction(error)) {
+        ({ data } = await supabase
+          .from('members').select('id, name').eq('status', 'active')
+          .order('name', { ascending: true }));
+      }
+      setMembers(data || []);
+      setFetching(false);
+    })();
   }, []);
 
   function handlePinChange(idx, val) {
@@ -292,9 +294,8 @@ function AdminLoginTab() {
     e.preventDefault();
     setError('');
     setLoading(true);
-    await new Promise(r => setTimeout(r, 400));
-    const ok = login(email, password);
-    if (!ok) setError('Invalid email or password. Please try again.');
+    const err = await login(email, password);
+    if (err) setError(err);
     setLoading(false);
   }
 

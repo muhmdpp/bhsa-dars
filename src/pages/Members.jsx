@@ -126,7 +126,7 @@ export default function Members() {
     else { setSortBy(col); setSortDir('asc'); }
   }
 
-  function SortIcon({ col }) {
+  function sortIcon(col) {
     if (sortBy !== col) return <span className="text-slate-300 ml-1">↕</span>;
     return <span className="text-slate-600 ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>;
   }
@@ -280,24 +280,24 @@ export default function Members() {
             <thead>
               <tr>
                 <th onClick={() => toggleSort('name')} className="cursor-pointer select-none">
-                  Name <SortIcon col="name" />
+                  Name {sortIcon('name')}
                 </th>
                 <th>Phone</th>
                 <th>Joined</th>
                 <th onClick={() => toggleSort('totalDeposited')} className="cursor-pointer select-none">
-                  Deposited <SortIcon col="totalDeposited" />
+                  Deposited {sortIcon('totalDeposited')}
                 </th>
                 <th onClick={() => toggleSort('totalWithdrawn')} className="cursor-pointer select-none">
-                  Withdrawn <SortIcon col="totalWithdrawn" />
+                  Withdrawn {sortIcon('totalWithdrawn')}
                 </th>
                 <th onClick={() => toggleSort('availableToWithdraw')} className="cursor-pointer select-none">
-                  Balance <SortIcon col="availableToWithdraw" />
+                  Balance {sortIcon('availableToWithdraw')}
                 </th>
                 <th onClick={() => toggleSort('totalBorrowed')} className="cursor-pointer select-none">
-                  Borrowed <SortIcon col="totalBorrowed" />
+                  Borrowed {sortIcon('totalBorrowed')}
                 </th>
                 <th onClick={() => toggleSort('outstanding')} className="cursor-pointer select-none">
-                  Outstanding <SortIcon col="outstanding" />
+                  Outstanding {sortIcon('outstanding')}
                 </th>
                 <th>Status</th>
                 <th>Actions</th>

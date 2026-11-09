@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { supabase, fetchAllRows, notDeleted } from '../lib/supabase';
+import { supabase, fetchAllRows, notDeleted, isMissingFunction } from '../lib/supabase';
 import { generateId, generateLoanId } from '../utils/formatters';
 import { getPoolBalance } from '../utils/calculations';
 
@@ -26,7 +26,7 @@ async function tryRpc(fn, args) {
   if (!rpcAvailable) return { used: false };
   const { data, error } = await supabase.rpc(fn, args);
   if (!error) return { used: true, data };
-  if (error.code === 'PGRST202' || error.code === '42883') { // function not installed
+  if (isMissingFunction(error)) { // function not installed
     rpcAvailable = false;
     return { used: false };
   }
@@ -134,6 +134,14 @@ export function StoreProvider({ children }) {
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
+  // Pool may not go below zero (p_change: + adds to the pool, − takes from it)
+  function assertPoolOk(change) {
+    const pool = getPoolBalance(state);
+    if (change < 0 && pool + change < 0) {
+      throw new Error(`Not enough cash in the pool: only ${inr(Math.max(0, pool))} is available right now (the rest is out on loan).`);
+    }
+  }
+
   // ── Actions ─────────────────────────────────────────────────────────────
   const actions = {
 
@@ -171,6 +179,20 @@ export function StoreProvider({ children }) {
     // Hard-delete a member and every record tied to them
     deleteMemberPermanently: async (id) => {
       if ((await tryRpc('dhsa_delete_member', { p_id: id })).used) { await loadAll(); return; }
+
+      // Only when nothing is owed either way (otherwise money would vanish from the books)
+      const balance = await fetchMemberBalance(id);
+      if (balance !== 0) {
+        throw new Error(`This member still has a deposit balance of ${inr(balance)}. Settle it to zero before deleting.`);
+      }
+      const { data: mLoans, error: mlErr } = await notDeleted(
+        supabase.from('loans').select('id, amount').eq('member_id', id));
+      check(mlErr);
+      let owed = 0;
+      for (const l of mLoans || []) owed += Math.max(0, Number(l.amount) - await fetchLoanRepaid(l.id));
+      if (owed > 0) {
+        throw new Error(`This member still owes ${inr(owed)} on loans. Clear the loans before deleting.`);
+      }
       const { error: e1 } = await supabase.from('withdrawals').delete().eq('member_id', id);
       check(e1);
       const { error: e2 } = await supabase.from('repayments').delete().eq('member_id', id);
@@ -214,6 +236,7 @@ export function StoreProvider({ children }) {
       const oldBefore = await fetchMemberBalance(old.member_id);
       const oldAfter  = oldBefore - Number(old.amount) + (newMember === old.member_id ? newAmount : 0);
       assertBalanceOk(oldBefore, oldAfter, 'This edit');
+      assertPoolOk(newAmount - Number(old.amount));
 
       const { error } = await supabase.from('deposits').update({
         ...data,
@@ -231,6 +254,7 @@ export function StoreProvider({ children }) {
       check(oErr);
       const before = await fetchMemberBalance(old.member_id);
       assertBalanceOk(before, before - Number(old.amount), 'Deleting this deposit');
+      assertPoolOk(-Number(old.amount));
 
       const { error } = await supabase.from('deposits').update({
         deleted:     true,
@@ -389,6 +413,7 @@ export function StoreProvider({ children }) {
         if (Number(data.amount) > remaining) {
           throw new Error(`Amount exceeds what is left on loan ${loan.id} (${inr(remaining)}).`);
         }
+        assertPoolOk(Number(data.amount) - Number(old.amount));
       }
 
       // A repayment always belongs to its loan's borrower; loan_id can't be changed here
@@ -409,8 +434,9 @@ export function StoreProvider({ children }) {
     deleteRepayment: async (id, reason) => {
       if ((await tryRpc('dhsa_delete_repayment', { p_id: id, p_reason: reason })).used) { await loadAll(); return; }
       const { data: old, error: oErr } = await supabase
-        .from('repayments').select('loan_id').eq('id', id).single();
+        .from('repayments').select('loan_id, amount').eq('id', id).single();
       check(oErr);
+      assertPoolOk(-Number(old.amount));
 
       const { error } = await supabase.from('repayments').update({
         deleted:     true,
@@ -435,6 +461,7 @@ export function StoreProvider({ children }) {
       if (numAmount > balance) {
         throw new Error(`Insufficient balance. This member has only ${inr(Math.max(0, balance))} available.`);
       }
+      assertPoolOk(-numAmount);
 
       const { error } = await supabase.from('withdrawals').insert([{
         id: withdrawalId,
@@ -464,6 +491,7 @@ export function StoreProvider({ children }) {
       const before = await fetchMemberBalance(newMember);
       const after  = await fetchMemberBalance(newMember, { excludeWithdrawalId: id }) - newAmount;
       assertBalanceOk(before, after, 'This edit');
+      assertPoolOk(Number(old.amount) - newAmount);
 
       const { error } = await supabase.from('withdrawals').update({
         ...data,
@@ -503,6 +531,7 @@ export function StoreProvider({ children }) {
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
+// eslint-disable-next-line react-refresh/only-export-components
 export function useStore() {
   const ctx = useContext(StoreContext);
   if (!ctx) throw new Error('useStore must be used within StoreProvider');

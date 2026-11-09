@@ -1,23 +1,22 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, isMissingFunction } from '../lib/supabase';
 
-const ADMIN_EMAIL    = import.meta.env.VITE_ADMIN_EMAIL    || '';
-const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || '';
+// Admin sign-in uses Supabase Auth, so no password is shipped inside the app.
+// PIN checks happen in the database (20261109_security_and_audit.sql). Until that
+// migration has been run, the PIN checks fall back to the old client-side way.
 
-const DEFAULT_PIN        = '2608';
-const LOGIN_STORAGE      = 'bhsa_logged_in';
 const MEMBER_SESSION_KEY = 'bhsa_member_session';
 
-// Remove any legacy localStorage PIN so old devices don't diverge
+// Remove legacy keys from older versions
 localStorage.removeItem('bhsa_pin');
+sessionStorage.removeItem('bhsa_logged_in');
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [loggedIn, setLoggedIn]   = useState(() => sessionStorage.getItem(LOGIN_STORAGE) === 'true');
+  const [session, setSession]     = useState(null);
   const [pinLocked, setPinLocked] = useState(true); // always starts locked each session
-  const [pinReady, setPinReady]   = useState(false);
-  const [pin, setPin]             = useState(DEFAULT_PIN); // in-memory cache
+  const [pinReady, setPinReady]   = useState(false); // auth state restored
 
   // ── Member session ───────────────────────────────────────────────────────
   const [memberSession, setMemberSession] = useState(() => {
@@ -27,98 +26,121 @@ export function AuthProvider({ children }) {
     } catch { return null; }
   });
 
-  // ── Fetch PIN from Supabase on mount ────────────────────────────────────
+  // ── Restore + follow the Supabase admin session ─────────────────────────
   useEffect(() => {
-    async function fetchPin() {
-      const { data, error } = await supabase
-        .from('settings')
-        .select('pin')
-        .eq('id', 'global')
-        .single();
-
-      if (!error && data?.pin) {
-        setPin(data.pin);
-      }
-      // If fetch fails, fall back to DEFAULT_PIN already set in state
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session ?? null);
       setPinReady(true);
-    }
-    fetchPin();
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s ?? null);
+      if (!s) setPinLocked(true);
+    });
+    return () => sub.subscription.unsubscribe();
   }, []);
 
-  // ── Email login ─────────────────────────────────────────────────────────
-  const login = useCallback((email, password) => {
-    if (email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASSWORD) {
-      sessionStorage.setItem(LOGIN_STORAGE, 'true');
-      setLoggedIn(true);
-      setPinLocked(true); // still needs PIN after login
-      return true;
+  // ── Admin sign-in ───────────────────────────────────────────────────────
+  // Returns null on success, or an error message.
+  const login = useCallback(async (email, password) => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    if (error) {
+      return error.message === 'Invalid login credentials'
+        ? 'Invalid email or password. Please try again.'
+        : error.message;
     }
-    return false;
+    setPinLocked(true); // still needs PIN after login
+    return null;
   }, []);
 
-  const logout = useCallback(() => {
-    sessionStorage.removeItem(LOGIN_STORAGE);
-    setLoggedIn(false);
+  const logout = useCallback(async () => {
     setPinLocked(true);
+    await supabase.auth.signOut();
   }, []);
 
-  // ── PIN lock ─────────────────────────────────────────────────────────────
-  const unlockWithPin = useCallback((enteredPin) => {
-    if (enteredPin === pin) {
+  // ── Admin PIN lock ───────────────────────────────────────────────────────
+  // Returns null on success, or an error message.
+  const unlockWithPin = useCallback(async (enteredPin) => {
+    const { data, error } = await supabase.rpc('dhsa_verify_admin_pin', { p_pin: enteredPin });
+    if (error && isMissingFunction(error)) {
+      // Fallback before the security migration is installed
+      const { data: s, error: sErr } = await supabase
+        .from('settings').select('pin').eq('id', 'global').single();
+      if (sErr) return sErr.message;
+      if (s?.pin !== enteredPin) return 'Incorrect PIN';
       setPinLocked(false);
-      return true;
+      return null;
     }
-    return false;
-  }, [pin]);
+    if (error) return error.message;
+    if (data?.error) return data.error;
+    setPinLocked(false);
+    return null;
+  }, []);
 
   const lockScreen = useCallback(() => {
     setPinLocked(true);
   }, []);
 
-  // async — updates Supabase then refreshes in-memory cache
+  // Returns true on success, false if the current PIN is wrong; throws otherwise
   const changePin = useCallback(async (currentPin, newPin) => {
-    if (currentPin !== pin) return false;
-
-    const { error } = await supabase
-      .from('settings')
-      .update({ pin: newPin })
-      .eq('id', 'global');
-
+    const { data, error } = await supabase.rpc('dhsa_change_admin_pin', {
+      p_current: currentPin, p_new: newPin,
+    });
+    if (error && isMissingFunction(error)) {
+      const { data: s, error: sErr } = await supabase
+        .from('settings').select('pin').eq('id', 'global').single();
+      if (sErr) throw new Error(sErr.message);
+      if (s?.pin !== currentPin) return false;
+      const { error: uErr } = await supabase.from('settings').update({ pin: newPin }).eq('id', 'global');
+      if (uErr) throw new Error(uErr.message);
+      return true;
+    }
     if (error) throw new Error(error.message);
-
-    setPin(newPin); // keep in-memory cache in sync
+    if (data?.error === 'Incorrect PIN') return false;
+    if (data?.error) throw new Error(data.error);
     return true;
-  }, [pin]);
-
-  const getCurrentPin = useCallback(() => pin, [pin]);
+  }, []);
 
   // ── Member portal login ──────────────────────────────────────────────────
   // Returns null on success, or an error string on failure.
   const memberLogin = useCallback(async (memberId, enteredPin) => {
-    const { data, error } = await supabase
-      .from('members')
-      .select('id, name, pin')
-      .eq('id', memberId)
-      .single();
+    let next;
+    const { data, error } = await supabase.rpc('dhsa_member_login', {
+      p_member_id: memberId, p_pin: enteredPin,
+    });
 
-    if (error || !data) return 'Member not found.';
-    if (!data.pin)      return 'No PIN set for this member. Please contact the admin.';
-    if (data.pin !== enteredPin) return 'Incorrect PIN. Please try again.';
+    if (error && isMissingFunction(error)) {
+      // Fallback before the security migration is installed
+      const { data: m, error: mErr } = await supabase
+        .from('members').select('id, name, pin').eq('id', memberId).single();
+      if (mErr || !m) return 'Member not found.';
+      if (!m.pin)     return 'No PIN set for this member. Please contact the admin.';
+      if (m.pin !== enteredPin) return 'Incorrect PIN. Please try again.';
+      next = { memberId: m.id, memberName: m.name, token: null };
+    } else {
+      if (error)       return error.message;
+      if (data?.error) return data.error;
+      next = { memberId: data.member_id, memberName: data.name, token: data.token };
+    }
 
-    const session = { memberId: data.id, memberName: data.name };
-    sessionStorage.setItem(MEMBER_SESSION_KEY, JSON.stringify(session));
-    setMemberSession(session);
-    return null; // success
+    sessionStorage.setItem(MEMBER_SESSION_KEY, JSON.stringify(next));
+    setMemberSession(next);
+    return null;
   }, []);
 
   const memberLogout = useCallback(() => {
+    const token = memberSession?.token;
+    if (token) supabase.rpc('dhsa_member_logout', { p_token: token }).then(() => {});
     sessionStorage.removeItem(MEMBER_SESSION_KEY);
     setMemberSession(null);
-  }, []);
+  }, [memberSession]);
 
   return (
     <AuthContext.Provider value={{
-      loggedIn,
+      loggedIn: !!session,
+      adminEmail: session?.user?.email ?? null,
       pinLocked,
       pinReady,
       login,
@@ -126,7 +148,6 @@ export function AuthProvider({ children }) {
       unlockWithPin,
       lockScreen,
       changePin,
-      getCurrentPin,
       memberSession,
       memberLogin,
       memberLogout,
@@ -136,6 +157,7 @@ export function AuthProvider({ children }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');

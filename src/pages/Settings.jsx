@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Settings() {
-  const { changePin, lockScreen, logout, getCurrentPin } = useAuth();
+  const { changePin, lockScreen, logout } = useAuth();
 
   // PIN change form
   const [currentPin, setCurrentPin] = useState('');
